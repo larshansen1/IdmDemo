@@ -1,0 +1,19 @@
+# gitleaks configuration
+# Docs: https://github.com/gitleaks/gitleaks#configuration
+title = "gitleaks config"
+
+[extend]
+# Inherit the default ruleset (covers 100+ secret types)
+useDefault = true
+
+[allowlist]
+description = "Global allowlist"
+# Ignore test fixture values that look like secrets but are safe examples
+regexes = [
+    # xUnit InlineData with numeric-only values
+    '''InlineData\(\d''',
+]
+paths = [
+    # Allow secrets in test files only if they are clearly fake/placeholder values
+    # (extend this list carefully — prefer using environment variables in tests)
+]

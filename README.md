@@ -11,6 +11,7 @@ A GitHub template repository for new .NET 8 projects with opinionated quality ga
 | Code formatting / lint | `dotnet format` + Roslyn analyzers | zero violations |
 | Duplicate code | jscpd | < 5% |
 | Security issues | SecurityCodeScan (Roslyn) + StyleCop | build-time, zero warnings |
+| Hardcoded credentials | gitleaks | zero secrets detected |
 | Vulnerable dependencies | `dotnet list package --vulnerable` | zero known CVEs |
 
 ---
@@ -80,6 +81,7 @@ make format          # Auto-format code
 make complexity      # Fail if any method CCN ≥ 10
 make duplicates      # Fail if duplicate code exceeds 5%
 make security        # Run Roslyn security analyzers
+make secrets         # Scan for hardcoded credentials (gitleaks)
 make vulnerabilities # Fail if any package has a known CVE
 make clean           # Delete bin/, obj/, coverage/, TestResults/
 ```
@@ -100,10 +102,11 @@ Hooks run automatically on `git commit`. They check:
 
 1. Trailing whitespace / end-of-file (pre-commit standard hooks)
 2. YAML validity
-3. .NET code formatting (`dotnet format --verify-no-changes`)
-4. Build succeeds (`dotnet build -warnaserror`)
-5. Tests pass and coverage ≥ 80%
-6. No vulnerable NuGet packages
+3. Hardcoded credentials (`gitleaks`)
+4. .NET code formatting (`dotnet format --verify-no-changes`)
+5. Build succeeds (`dotnet build -warnaserror`)
+6. Tests pass and coverage ≥ 80%
+7. No vulnerable NuGet packages
 
 Skip hooks only in emergencies:
 
@@ -133,6 +136,7 @@ git commit --no-verify   # not recommended
 │   └── dotnet-tools.json       # Pinned .NET local tools
 ├── .editorconfig               # Formatting rules
 ├── .pre-commit-config.yaml     # Git pre-commit hooks
+├── .gitleaks.toml              # gitleaks rules and allowlist
 ├── Directory.Build.props       # Shared MSBuild properties + analyzers
 ├── global.json                 # Pinned .NET SDK version
 ├── Makefile
@@ -160,6 +164,27 @@ For the pre-commit coverage hook, update the `Threshold=80` value in `.pre-commi
 GitHub Actions runs on every push and pull request to `main` (see `.github/workflows/ci.yml`). It runs the same gates as `make check`.
 
 Dependabot automatically opens PRs for outdated NuGet packages and GitHub Actions weekly.
+
+---
+
+## Tuning the secrets scan
+
+Gitleaks inherits 100+ built-in rules (AWS keys, GitHub tokens, connection strings, etc.) via `useDefault = true` in `.gitleaks.toml`. If a legitimate value triggers a false positive:
+
+```toml
+[allowlist]
+description = "Global allowlist"
+regexes = [
+    # Suppress a specific pattern
+    '''EXAMPLE_PLACEHOLDER_[A-Z0-9]{20}''',
+]
+paths = [
+    # Suppress an entire file (use sparingly — prefer environment variables)
+    "tests/Fixtures/fake-credentials.json",
+]
+```
+
+Never suppress a real secret — move it to an environment variable or secret manager instead.
 
 ---
 

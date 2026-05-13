@@ -73,6 +73,18 @@ else
     skip "duplicates" "jscpd not installed (npm install -g jscpd)"
 fi
 
+# ── Secrets ───────────────────────────────────────────────────────────────────
+echo "--- Secrets ---"
+if require_cmd gitleaks; then
+    if bash scripts/check-secrets.sh; then
+        pass "secret scan"
+    else
+        fail "secret scan"
+    fi
+else
+    skip "secret scan" "gitleaks not installed (see https://github.com/gitleaks/gitleaks#installing)"
+fi
+
 # ── Vulnerabilities ───────────────────────────────────────────────────────────
 echo "--- Vulnerabilities ---"
 if bash scripts/check-vulnerabilities.sh; then

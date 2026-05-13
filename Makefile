@@ -6,12 +6,12 @@ COVERAGE_DIR  := coverage
 RESULTS_DIR   := TestResults
 
 .PHONY: all check build test coverage lint format complexity duplicates \
-        security vulnerabilities install-tools clean test-template help
+        security secrets vulnerabilities install-tools clean test-template help
 
 ## Run all quality checks (default target)
 all: check
 
-check: build lint test coverage complexity duplicates security vulnerabilities
+check: build lint test coverage complexity duplicates security secrets vulnerabilities
 	@echo ""
 	@echo "✔  All quality checks passed."
 
@@ -80,6 +80,11 @@ security:
 vulnerabilities:
 	@bash scripts/check-vulnerabilities.sh
 
+# ── Secrets / Credentials ────────────────────────────────────────────────────
+
+secrets:
+	@bash scripts/check-secrets.sh
+
 # ── Tooling ──────────────────────────────────────────────────────────────────
 
 install-tools:
@@ -89,6 +94,12 @@ install-tools:
 	@command -v lizard >/dev/null 2>&1 || pip install lizard
 	@echo "==> Checking Node tools..."
 	@command -v jscpd >/dev/null 2>&1 || npm install -g jscpd
+	@echo "==> Checking gitleaks..."
+	@command -v gitleaks >/dev/null 2>&1 || { \
+		echo "gitleaks not found — install manually:"; \
+		echo "  macOS:  brew install gitleaks"; \
+		echo "  Linux:  https://github.com/gitleaks/gitleaks/releases"; \
+	}
 	@echo "==> Installing pre-commit..."
 	@command -v pre-commit >/dev/null 2>&1 || pip install pre-commit
 	pre-commit install
@@ -124,6 +135,7 @@ help:
 	@echo "  complexity     Check cyclomatic complexity (<$(COMPLEXITY_THRESHOLD))"
 	@echo "  duplicates     Check for duplicated code blocks (<$(DUPLICATE_THRESHOLD)%)"
 	@echo "  security       Run Roslyn security analyzers"
+	@echo "  secrets        Scan for hardcoded credentials (gitleaks)"
 	@echo "  vulnerabilities Check for vulnerable NuGet packages"
 	@echo ""
 	@echo "Utilities:"
