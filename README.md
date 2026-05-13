@@ -30,6 +30,8 @@ git remote set-url origin https://github.com/your-org/my-project.git
 
 ### 2. Rename the sample project
 
+> **Note:** .NET naming rules require PascalCase with no underscores for project and namespace names (e.g. `MyApp`, `IdmDemo`, `OrderService`). The analyzers will reject names like `my_app` or `idm_demo`.
+
 Replace `Template.Core` with your project name (example: `MyApp`):
 
 ```bash
