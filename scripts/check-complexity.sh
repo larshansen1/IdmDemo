@@ -6,7 +6,7 @@ THRESHOLD="${1:-10}"
 echo "==> Checking cyclomatic complexity (threshold: $THRESHOLD)..."
 
 if ! command -v lizard &>/dev/null; then
-    echo "ERROR: 'lizard' not found. Install with: pip install lizard"
+    echo "ERROR: 'lizard' not found. Install with: pipx install lizard"
     exit 1
 fi
 

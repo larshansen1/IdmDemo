@@ -57,19 +57,25 @@ dotnet sln add tests/MyApp.Tests/MyApp.Tests.csproj
 dotnet build
 ```
 
-### 3. Install required tools
+### 3. Install prerequisites
+
+The quality gates rely on tools from three ecosystems. Install them before running `make`:
+
+| Tool | Purpose | Install |
+|---|---|---|
+| `dotnet` 8+ | Build, test, format | [dot.net/download](https://dot.net/download) |
+| `lizard` | Complexity check | `pipx install lizard` |
+| `jscpd` | Duplicate detection | `npm install -g jscpd` |
+| `gitleaks` | Secret scanning | `brew install gitleaks` / [releases](https://github.com/gitleaks/gitleaks/releases) |
+| `pre-commit` | Git hooks | `pipx install pre-commit` |
+
+> **pipx vs pip:** Use `pipx` for CLI tools (`lizard`, `pre-commit`) — it installs each tool in its own isolated virtualenv so they don't pollute your global Python environment. Install pipx with `pip install pipx` if you don't have it.
+
+Then run:
 
 ```bash
-make install-tools
+make install-tools   # installs .NET local tools and activates pre-commit hooks
 ```
-
-This installs:
-- `.NET local tools` (`reportgenerator`)
-- `lizard` via pip (complexity)
-- `jscpd` via npm (duplicate detection)
-- `pre-commit` and activates the git hook
-
-Prerequisites: `dotnet` 8+, `python3` + `pip`, `node` + `npm`.
 
 ---
 

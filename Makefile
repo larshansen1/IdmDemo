@@ -91,7 +91,7 @@ install-tools:
 	@echo "==> Installing .NET local tools..."
 	dotnet tool restore
 	@echo "==> Checking Python tools..."
-	@command -v lizard >/dev/null 2>&1 || pip install lizard
+	@command -v lizard >/dev/null 2>&1 || pipx install lizard
 	@echo "==> Checking Node tools..."
 	@command -v jscpd >/dev/null 2>&1 || npm install -g jscpd
 	@echo "==> Checking gitleaks..."
@@ -101,7 +101,7 @@ install-tools:
 		echo "  Linux:  https://github.com/gitleaks/gitleaks/releases"; \
 	}
 	@echo "==> Installing pre-commit..."
-	@command -v pre-commit >/dev/null 2>&1 || pip install pre-commit
+	@command -v pre-commit >/dev/null 2>&1 || pipx install pre-commit
 	pre-commit install
 	@echo "All tools installed."
 
