@@ -6,7 +6,8 @@ COVERAGE_DIR  := coverage
 RESULTS_DIR   := TestResults
 
 .PHONY: all check build test coverage lint format complexity duplicates \
-        security secrets vulnerabilities install-tools clean test-template help
+        security secrets vulnerabilities install-tools _install-gitleaks \
+        clean test-template help
 
 ## Run all quality checks (default target)
 all: check
@@ -95,15 +96,35 @@ install-tools:
 	@echo "==> Checking Node tools..."
 	@command -v jscpd >/dev/null 2>&1 || npm install -g jscpd
 	@echo "==> Checking gitleaks..."
-	@command -v gitleaks >/dev/null 2>&1 || { \
-		echo "gitleaks not found — install manually:"; \
-		echo "  macOS:  brew install gitleaks"; \
-		echo "  Linux:  https://github.com/gitleaks/gitleaks/releases"; \
-	}
-	@echo "==> Installing pre-commit..."
+	@command -v gitleaks >/dev/null 2>&1 || $(MAKE) _install-gitleaks	@echo "==> Installing pre-commit..."
+
 	@command -v pre-commit >/dev/null 2>&1 || pipx install pre-commit
 	pre-commit install
 	@echo "All tools installed."
+
+_install-gitleaks:
+	@echo "==> Installing gitleaks..."
+	@GITLEAKS_VERSION=8.21.2; \
+	OS=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	ARCH=$$(uname -m); \
+	case "$$ARCH" in \
+		x86_64)  ARCH=x64 ;; \
+		aarch64) ARCH=arm64 ;; \
+		arm64)   ARCH=arm64 ;; \
+		*) echo "ERROR: Unsupported architecture: $$ARCH"; exit 1 ;; \
+	esac; \
+	if [ "$$OS" = "darwin" ]; then \
+		command -v brew >/dev/null 2>&1 && brew install gitleaks || { \
+			echo "ERROR: brew not found. Install Homebrew or download gitleaks manually."; exit 1; \
+		}; \
+	elif [ "$$OS" = "linux" ]; then \
+		curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v$${GITLEAKS_VERSION}/gitleaks_$${GITLEAKS_VERSION}_$${OS}_$${ARCH}.tar.gz" \
+			| sudo tar -xz -C /usr/local/bin gitleaks; \
+	else \
+		echo "ERROR: Unsupported OS: $$OS. Download gitleaks from https://github.com/gitleaks/gitleaks/releases"; \
+		exit 1; \
+	fi
+	@echo "gitleaks installed: $$(gitleaks version)"
 
 # ── Template Self-Test ───────────────────────────────────────────────────────
 
