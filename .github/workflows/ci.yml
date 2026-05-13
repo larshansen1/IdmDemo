@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  quality:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.x"
+
+      - name: Set up Python (for lizard)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Set up Node (for jscpd)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install external tools
+        run: |
+          pip install lizard
+          npm install -g jscpd
+
+      - name: Restore .NET local tools
+        run: dotnet tool restore
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build (with analyzers)
+        run: dotnet build --no-restore --no-incremental -warnaserror /p:RunAnalyzers=true
+
+      - name: Lint (formatting check)
+        run: dotnet format --no-restore --verify-no-changes
+
+      - name: Test with coverage
+        run: |
+          dotnet test --no-build \
+            /p:CollectCoverage=true \
+            /p:CoverletOutput=./coverage/ \
+            /p:CoverletOutputFormat=cobertura \
+            /p:Threshold=80 \
+            /p:ThresholdType=line \
+            /p:ThresholdStat=Total
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+
+      - name: Complexity check
+        run: bash scripts/check-complexity.sh 10
+
+      - name: Duplicate code check
+        run: bash scripts/check-duplicates.sh 5
+
+      - name: Vulnerability check
+        run: bash scripts/check-vulnerabilities.sh

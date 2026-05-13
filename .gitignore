@@ -1,0 +1,27 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+
+## Build / test artifacts
+TestResults/
+coverage/
+*.trx
+*.xml
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Node (jscpd)
+node_modules/
+.jscpd/
+
+## Python (lizard)
+__pycache__/
+*.pyc
+.venv/
