@@ -30,32 +30,15 @@ git remote set-url origin https://github.com/your-org/my-project.git
 
 ### 2. Rename the sample project
 
-> **Note:** .NET naming rules require PascalCase with no underscores for project and namespace names (e.g. `MyApp`, `IdmDemo`, `OrderService`). The analyzers will reject names like `my_app` or `idm_demo`.
+> **Note:** .NET naming rules require PascalCase with no underscores for project and namespace names (e.g. `MyApp`, `Backend`, `OrderService`). The analyzers will reject names like `my_app` or `idm_demo`.
 
-Replace `Template.Core` with your project name (example: `MyApp`):
+Run the rename script with your project name:
 
 ```bash
-# 1. Rename directories
-mv src/Template.Core src/MyApp
-mv tests/Template.Core.Tests tests/MyApp.Tests
-
-# 2. Rename the .csproj files inside those directories
-mv src/MyApp/Template.Core.csproj src/MyApp/MyApp.csproj
-mv tests/MyApp.Tests/Template.Core.Tests.csproj tests/MyApp.Tests/MyApp.Tests.csproj
-
-# 3. Replace namespaces in all source files
-find src tests -type f \( -name "*.cs" -o -name "*.csproj" \) \
-  -exec sed -i 's/Template\.Core/MyApp/g' {} +
-
-# 4. Update the solution file
-dotnet sln remove src/Template.Core/Template.Core.csproj
-dotnet sln remove tests/Template.Core.Tests/Template.Core.Tests.csproj
-dotnet sln add src/MyApp/MyApp.csproj
-dotnet sln add tests/MyApp.Tests/MyApp.Tests.csproj
-
-# 5. Verify it builds
-dotnet build
+bash scripts/rename-project.sh MyApp
 ```
+
+This renames directories, `.csproj` files, namespaces, solution references, and verifies the build in one step.
 
 ### 3. Install prerequisites
 
