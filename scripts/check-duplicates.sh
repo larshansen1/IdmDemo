@@ -11,7 +11,6 @@ if ! command -v jscpd &>/dev/null; then
 fi
 
 jscpd src/ \
-    --languages csharp \
     --min-lines 5 \
     --min-tokens 50 \
     --threshold "$THRESHOLD" \
