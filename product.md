@@ -297,6 +297,19 @@ Use a clean/layered architecture:
 
 The architecture should keep protocol concerns, business logic, and persistence concerns separated.
 
+### Key Dependencies
+
+| Package | Purpose |
+|---|---|
+| `Microsoft.EntityFrameworkCore.Sqlite` | ORM + SQLite provider |
+| `Swashbuckle.AspNetCore` | OpenAPI / Swagger UI |
+| `OpenTelemetry.Extensions.Hosting` | Distributed tracing host integration |
+| `OpenTelemetry.Instrumentation.AspNetCore` | ASP.NET Core request tracing |
+| `OpenTelemetry.Exporter.Console` | Console trace exporter (dev) |
+| `NSubstitute` | Mocking in unit tests |
+| `Microsoft.AspNetCore.Mvc.Testing` | In-process integration testing |
+| `coverlet.msbuild` | Code coverage collection |
+
 ### Observability
 
 The system should include:
@@ -305,6 +318,91 @@ The system should include:
 - Distributed tracing
 - Security-relevant audit logs
 - Clear correlation identifiers for request flows
+
+Correlation IDs are propagated via the `X-Correlation-Id` header. Requests without one get a generated UUID. The ID is echoed in the response header and included in all log scopes for that request.
+
+Audit log events follow the pattern `{Entity}{Action}` with structured fields:
+
+```
+UserCreated   { UserId, UserName }
+UserUpdated   { UserId }
+UserDeleted   { UserId }
+ClientCreated { ClientId, ExternalClientId }
+ClientUpdated { ClientId }
+ClientDeleted { ClientId }
+```
+
+---
+
+## Engineering Standards
+
+### Project Layer Rules
+
+```
+Backend.Api         → Backend.Application, Backend.Infrastructure
+Backend.Application → Backend.Domain
+Backend.Infrastructure → Backend.Domain
+Backend.Tests       → Backend.Application, Backend.Domain
+Backend.IntegrationTests → Backend.Api, Backend.Infrastructure
+```
+
+The domain layer has zero external dependencies. Application has no infrastructure or web dependencies. Infrastructure has no web dependencies.
+
+### API Conventions
+
+- All endpoints require `X-Api-Key` header authentication.
+- All requests and responses use `Content-Type: application/scim+json`.
+- Error responses always include a SCIM error envelope: `schemas`, `status`, `scimType`, `detail`.
+- HTTP status codes: 201 Created, 200 OK, 204 No Content, 400 invalidValue, 401 Unauthorized, 404 Not Found, 409 uniqueness.
+- `Location` header is set on 201 responses.
+- `SuppressAsyncSuffixInActionNames = false` is required so `CreatedAtAction(nameof(GetAsync), ...)` resolves correctly.
+
+### Domain Model Conventions
+
+- Entities use private parameterless constructors (for EF Core) marked `[ExcludeFromCodeCoverage]`.
+- All construction goes through static factory methods (`Create(...)`).
+- State transitions use explicit methods (`Activate()`, `Deactivate()`, `Update(...)`).
+- Entities never expose setters publicly.
+- Repository interfaces live in `Backend.Domain`. Implementations live in `Backend.Infrastructure`.
+
+### Service Layer Conventions
+
+- Services validate inputs before touching the repository.
+- Validation order: null check → empty/whitespace → max length → format → uniqueness (repository call).
+- Uniqueness violations throw `ConflictException`. Missing resources throw `NotFoundException`. Field errors throw `ValidationException`.
+- `ArgumentNullException.ThrowIfNull` is used for null guards at public method boundaries.
+- Services never return domain entities — always map to response DTOs.
+
+### Code Style
+
+- StyleCop and all Roslyn analyzers are enabled at `AnalysisMode=All` with `TreatWarningsAsErrors=true`.
+- Private fields and constants use `_camelCase` prefix (SA1309 suppressed to allow underscore prefix).
+- `this.` is required for all instance member access (SA1101).
+- Public members before private members within each member type (SA1202, SA1204).
+- No comments unless the _why_ is non-obvious. No XML doc comments on internal types.
+- No `ConfigureAwait(false)` in test methods (xUnit1030 rule). CA2007 is suppressed in `tests/**`.
+- EF Core migration files are excluded from analyzer rules via `.editorconfig` (`generated_code = true`).
+
+### Testing Conventions
+
+- Unit tests use NSubstitute for mocking. No real database in unit tests.
+- Integration tests use `WebApplicationFactory<Program>` with a unique SQLite file per factory instance.
+- Test names follow `MethodName_Scenario_ExpectedOutcome` (CA1707 suppressed in tests).
+- Every service method has at minimum: happy path, not-found path, validation failure path.
+- Both `Activate()` and `Deactivate()` paths must be covered.
+- Integration tests cover: 201, 400, 401, 404, 409, 204 for each resource type.
+- `IClassFixture<T>` is used for shared factory setup within a test class.
+
+### Quality Gate Thresholds
+
+| Gate | Threshold |
+|---|---|
+| Line coverage | ≥ 80% per project |
+| Cyclomatic complexity | CCN < 10 per method |
+| Duplicate code | < 5% in `src/` (migrations excluded) |
+| Build warnings | zero |
+| Secrets | zero |
+| Vulnerable packages | zero |
 
 ---
 

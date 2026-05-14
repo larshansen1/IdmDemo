@@ -1,118 +1,71 @@
-# .NET Project Template
+# IdmDemo
 
-A GitHub template repository for new .NET 8 projects with opinionated quality gates enforced via pre-commit hooks, a `Makefile`, and GitHub Actions CI.
+A simple Identity Provider and Authorization Server built for learning, private experimentation, and agentic development workflows.
 
-## Quality gates
-
-| Gate | Tool | Threshold |
-|---|---|---|
-| Test coverage | coverlet | ≥ 80% line coverage |
-| Cyclomatic complexity | lizard | < 10 per method |
-| Code formatting / lint | `dotnet format` + Roslyn analyzers | zero violations |
-| Duplicate code | jscpd | < 5% |
-| Security issues | SecurityCodeScan (Roslyn) + StyleCop | build-time, zero warnings |
-| Hardcoded credentials | gitleaks | zero secrets detected |
-| Vulnerable dependencies | `dotnet list package --vulnerable` | zero known CVEs |
+Implements clean architecture, explicit security boundaries, structured observability, automated testing, and enforced quality gates from the start.
 
 ---
 
-## Using this template
+## What it does
 
-### 1. Create a new repository from this template
+Epic 1 (complete) — SCIM-inspired administrative APIs for managing users and machine clients, protected by API-key authentication.
 
-Click **"Use this template"** on GitHub, or clone and re-init:
+Planned: mTLS machine-to-machine authentication, JWT/DPoP token issuance, certificate lifecycle, global roles and scopes, MCP administrative interface.
 
-```bash
-git clone https://github.com/your-org/dotnet-template my-project
-cd my-project
-git remote set-url origin https://github.com/your-org/my-project.git
-```
-
-### 2. Rename the sample project
-
-> **Note:** .NET naming rules require PascalCase with no underscores for project and namespace names (e.g. `MyApp`, `Backend`, `OrderService`). The analyzers will reject names like `my_app` or `idm_demo`.
-
-Run the rename script with your project name:
-
-```bash
-bash scripts/rename-project.sh MyApp
-```
-
-This renames directories, `.csproj` files, namespaces, solution references, and verifies the build in one step.
-
-### 3. Install prerequisites
-
-The quality gates rely on tools from three ecosystems. Install them before running `make`:
-
-| Tool | Purpose | Install |
-|---|---|---|
-| `dotnet` 8+ | Build, test, format | [dot.net/download](https://dot.net/download) |
-| `lizard` | Complexity check | `pipx install lizard` |
-| `jscpd` | Duplicate detection | `npm install -g jscpd` |
-| `gitleaks` | Secret scanning | `brew install gitleaks` / [releases](https://github.com/gitleaks/gitleaks/releases) |
-| `pre-commit` | Git hooks | `pipx install pre-commit` |
-
-> **pipx vs pip:** Use `pipx` for CLI tools (`lizard`, `pre-commit`) — it installs each tool in its own isolated virtualenv so they don't pollute your global Python environment. Install pipx with `pip install pipx` if you don't have it.
-
-Then run:
-
-```bash
-make install-tools   # installs .NET local tools and activates pre-commit hooks
-```
+See [product.md](product.md) for the full roadmap.
 
 ---
 
-## Daily workflow
+## API
 
-### Run all quality checks
+All endpoints require `X-Api-Key: <key>` (default: `changeme-development-key`).  
+All requests and responses use `Content-Type: application/scim+json`.
 
-```bash
-make check
+### Users
+
+```
+POST   /scim/v2/Users
+GET    /scim/v2/Users?filter=userName eq "alice"
+GET    /scim/v2/Users/{id}
+PUT    /scim/v2/Users/{id}
+PATCH  /scim/v2/Users/{id}
+DELETE /scim/v2/Users/{id}
 ```
 
-### Individual targets
+### Machine Clients
 
-```bash
-make build           # Build the solution (warnings as errors)
-make test            # Run tests
-make coverage        # Run tests + enforce 80% line coverage
-make coverage-report # Generate HTML coverage report in coverage/html/
-make lint            # Fail if code is not formatted
-make format          # Auto-format code
-make complexity      # Fail if any method CCN ≥ 10
-make duplicates      # Fail if duplicate code exceeds 5%
-make security        # Run Roslyn security analyzers
-make secrets         # Scan for hardcoded credentials (gitleaks)
-make vulnerabilities # Fail if any package has a known CVE
-make clean           # Delete bin/, obj/, coverage/, TestResults/
+```
+POST   /scim/v2/Clients
+GET    /scim/v2/Clients?filter=clientId eq "orders-service"
+GET    /scim/v2/Clients/{id}
+PUT    /scim/v2/Clients/{id}
+PATCH  /scim/v2/Clients/{id}
+DELETE /scim/v2/Clients/{id}
 ```
 
-### Verify the template itself
-
-```bash
-make test-template
-```
-
-Runs every check against the sample code and prints a pass/fail/skip summary.
+Swagger UI is available at `/swagger` when running in Development mode.
 
 ---
 
-## Pre-commit hooks
-
-Hooks run automatically on `git commit`. They check:
-
-1. Trailing whitespace / end-of-file (pre-commit standard hooks)
-2. YAML validity
-3. Hardcoded credentials (`gitleaks`)
-4. .NET code formatting (`dotnet format --verify-no-changes`)
-5. Build succeeds (`dotnet build -warnaserror`)
-6. Tests pass and coverage ≥ 80%
-7. No vulnerable NuGet packages
-
-Skip hooks only in emergencies:
+## Running locally
 
 ```bash
-git commit --no-verify   # not recommended
+dotnet run --project src/Backend.Api
+```
+
+The API starts on `http://localhost:5000`. The SQLite database (`idm.db`) is created automatically on first run via EF Core migrations.
+
+### Demo script
+
+```bash
+bash scripts/demo-api.sh          # run all scenarios, show pass/fail
+bash scripts/demo-api.sh --verbose  # show full request and response for each call
+```
+
+Environment overrides:
+
+```bash
+API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-api.sh
 ```
 
 ---
@@ -122,82 +75,105 @@ git commit --no-verify   # not recommended
 ```
 .
 ├── src/
-│   └── Template.Core/          # Production code — rename this
+│   ├── Backend.Api/            # ASP.NET Core Web API, controllers, middleware, Program.cs
+│   ├── Backend.Application/    # Services, DTOs, SCIM filter parser
+│   ├── Backend.Domain/         # Entities, repository interfaces, domain exceptions
+│   └── Backend.Infrastructure/ # EF Core DbContext, SQLite, repositories, migrations
 ├── tests/
-│   └── Template.Core.Tests/    # xUnit tests — rename this
+│   ├── Backend.Tests/          # Unit tests (xUnit + NSubstitute)
+│   └── Backend.IntegrationTests/ # End-to-end tests (WebApplicationFactory + SQLite)
 ├── scripts/
+│   ├── demo-api.sh             # curl-based API demo with optional verbose mode
 │   ├── check-complexity.sh
 │   ├── check-duplicates.sh
-│   ├── check-vulnerabilities.sh
-│   └── test-template.sh        # End-to-end template self-test
-├── .github/
-│   ├── workflows/ci.yml        # GitHub Actions pipeline
-│   └── dependabot.yml          # Automated dependency updates
-├── .config/
-│   └── dotnet-tools.json       # Pinned .NET local tools
-├── .editorconfig               # Formatting rules
+│   ├── check-secrets.sh
+│   └── check-vulnerabilities.sh
+├── .github/workflows/ci.yml    # GitHub Actions CI pipeline
+├── .editorconfig               # Formatting and analyzer rules
 ├── .pre-commit-config.yaml     # Git pre-commit hooks
-├── .gitleaks.toml              # gitleaks rules and allowlist
-├── Directory.Build.props       # Shared MSBuild properties + analyzers
-├── global.json                 # Pinned .NET SDK version
+├── Directory.Build.props       # Shared MSBuild properties and analyzers
 ├── Makefile
-└── Template.sln
+└── product.md                  # Product roadmap and engineering standards
 ```
 
 ---
 
-## Adjusting thresholds
+## Quality gates
 
-Edit the top of `Makefile`:
+| Gate | Tool | Threshold |
+|---|---|---|
+| Build | `dotnet build -warnaserror` | zero warnings |
+| Lint | `dotnet format --verify-no-changes` | zero violations |
+| Tests | xUnit | all pass |
+| Coverage | coverlet | ≥ 80% line coverage |
+| Complexity | lizard | CCN < 10 per method |
+| Duplicates | jscpd | < 5% in `src/` |
+| Security | Roslyn analyzers + StyleCop | zero warnings |
+| Secrets | gitleaks | zero secrets detected |
+| Vulnerabilities | `dotnet list package --vulnerable` | zero known CVEs |
 
-```makefile
-COVERAGE_THRESHOLD   := 80   # minimum % line coverage
-COMPLEXITY_THRESHOLD := 10   # maximum cyclomatic complexity per method
-DUPLICATE_THRESHOLD  := 5    # maximum % duplicate code allowed
+Run all gates:
+
+```bash
+make check
 ```
 
-For the pre-commit coverage hook, update the `Threshold=80` value in `.pre-commit-config.yaml`.
+Individual targets: `make build`, `make lint`, `make test`, `make coverage`, `make complexity`, `make duplicates`, `make security`, `make secrets`, `make vulnerabilities`.
+
+---
+
+## Prerequisites
+
+| Tool | Purpose | Install |
+|---|---|---|
+| `dotnet` 8 | Build, test, format | [dot.net/download](https://dot.net/download) |
+| `lizard` | Complexity check | `pipx install lizard` |
+| `jscpd` | Duplicate detection | `npm install -g jscpd` |
+| `gitleaks` | Secret scanning | `brew install gitleaks` / [releases](https://github.com/gitleaks/gitleaks/releases) |
+| `pre-commit` | Git hooks | `pipx install pre-commit` |
+| `sqlite3` | Inspect the database | `apt install sqlite3` / `brew install sqlite3` |
+
+```bash
+make install-tools
+```
+
+---
+
+## Pre-commit hooks
+
+Hooks run automatically on `git commit`:
+
+1. Trailing whitespace / end-of-file
+2. YAML validity
+3. Hardcoded credentials (gitleaks)
+4. Code formatting (`dotnet format --verify-no-changes`)
+5. Build (`dotnet build -warnaserror`)
+6. Tests + coverage ≥ 80%
+7. No vulnerable NuGet packages
+
+---
+
+## Configuration
+
+`src/Backend.Api/appsettings.json`:
+
+```json
+{
+  "AdminApi": { "ApiKey": "changeme-development-key" },
+  "ConnectionStrings": { "Default": "Data Source=idm.db" }
+}
+```
+
+Override via environment variables for deployment:
+
+```bash
+AdminApi__ApiKey=secret ConnectionStrings__Default="Data Source=/data/idm.db" dotnet run
+```
 
 ---
 
 ## CI/CD
 
-GitHub Actions runs on every push and pull request to `main` (see `.github/workflows/ci.yml`). It runs the same gates as `make check`.
+GitHub Actions runs on every push and pull request to `main`. It executes the same gates as `make check`. See `.github/workflows/ci.yml`.
 
 Dependabot automatically opens PRs for outdated NuGet packages and GitHub Actions weekly.
-
----
-
-## Tuning the secrets scan
-
-Gitleaks inherits 100+ built-in rules (AWS keys, GitHub tokens, connection strings, etc.) via `useDefault = true` in `.gitleaks.toml`. If a legitimate value triggers a false positive:
-
-```toml
-[allowlist]
-description = "Global allowlist"
-regexes = [
-    # Suppress a specific pattern
-    '''EXAMPLE_PLACEHOLDER_[A-Z0-9]{20}''',
-]
-paths = [
-    # Suppress an entire file (use sparingly — prefer environment variables)
-    "tests/Fixtures/fake-credentials.json",
-]
-```
-
-Never suppress a real secret — move it to an environment variable or secret manager instead.
-
----
-
-## Adding security scanning (optional hardening)
-
-For deeper SAST beyond the built-in Roslyn analyzers, add [SecurityCodeScan](https://security-code-scan.github.io/) as a NuGet analyzer in `Directory.Build.props`:
-
-```xml
-<PackageReference Include="SecurityCodeScan.VS2019" Version="5.6.7">
-  <PrivateAssets>all</PrivateAssets>
-  <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-</PackageReference>
-```
-
-Or integrate [Snyk](https://snyk.io) / [GitHub Advanced Security](https://docs.github.com/en/code-security) for supply-chain and secret scanning.
