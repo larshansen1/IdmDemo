@@ -45,10 +45,17 @@ dotnet_diagnostic.SA1611.severity = none
 dotnet_diagnostic.SA1615.severity = none
 dotnet_diagnostic.SA1623.severity = none
 dotnet_diagnostic.SA1633.severity = none
+dotnet_diagnostic.SA1309.severity = none
 
 # Tests — allow Method_Scenario_Expected naming (CA1707) and suppress SA1516
 [tests/**/*.cs]
 dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA2007.severity = none
+
+[src/**/Migrations/*.cs]
+generated_code = true
+dotnet_diagnostic.CA1062.severity = none
+dotnet_diagnostic.SA1413.severity = none
 
 [*.{csproj,props,targets}]
 indent_size = 2

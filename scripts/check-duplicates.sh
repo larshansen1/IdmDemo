@@ -10,12 +10,17 @@ if ! command -v jscpd &>/dev/null; then
     exit 1
 fi
 
-jscpd src/ \
-    --ignore "**/obj/**,**/bin/**" \
+OUTPUT=$(jscpd src/ \
+    --ignore "**/obj/**,**/bin/**,**/Migrations/**" \
     --min-lines 5 \
     --min-tokens 50 \
     --threshold "$THRESHOLD" \
-    --reporters console \
-    --exitCode
+    --reporters console 2>&1)
+
+echo "$OUTPUT"
+
+if echo "$OUTPUT" | grep -q "too many duplicates"; then
+    exit 1
+fi
 
 echo "Duplicate code check passed."

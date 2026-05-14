@@ -3,11 +3,12 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <IsPackable>false</IsPackable>
-    <RootNamespace>Template.Core.Tests</RootNamespace>
+    <RootNamespace>Backend.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <PrivateAssets>all</PrivateAssets>
@@ -20,7 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Template.Core\Template.Core.csproj" />
+    <ProjectReference Include="..\..\src\Backend.Application\Backend.Application.csproj" />
+    <ProjectReference Include="..\..\src\Backend.Domain\Backend.Domain.csproj" />
   </ItemGroup>
 
 </Project>
