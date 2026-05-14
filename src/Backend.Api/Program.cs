@@ -41,8 +41,10 @@ var authorizationServerOptions = builder.Configuration
     ?? new AuthorizationServerOptions();
 var signingKeyPath = builder.Configuration["AuthorizationServer:SigningKeyPath"]
     ?? Path.Combine(builder.Environment.ContentRootPath, "signing-key.json");
+var certificateAuthorityPath = builder.Configuration["CertificateAuthority:KeyPath"]
+    ?? Path.Combine(builder.Environment.ContentRootPath, "certificate-authority.json");
 
-builder.Services.AddInfrastructure(connectionString, signingKeyPath);
+builder.Services.AddInfrastructure(connectionString, signingKeyPath, certificateAuthorityPath);
 builder.Services.AddApplication(authorizationServerOptions);
 builder.Services.AddSingleton<IClientCertificateReader, ClientCertificateReader>();
 

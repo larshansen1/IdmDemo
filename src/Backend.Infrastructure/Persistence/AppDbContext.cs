@@ -14,6 +14,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<MachineClient> MachineClients { get; set; } = null!;
 
+    public DbSet<MachineClientCertificate> MachineClientCertificates { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -37,6 +39,25 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.CertificateSubject).HasMaxLength(512);
             entity.Property(e => e.AssignedScopeValues).HasMaxLength(2048);
             entity.Property(e => e.AssignedRoleValues).HasMaxLength(2048);
+        });
+
+        modelBuilder.Entity<MachineClientCertificate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ThumbprintSha256).IsUnique();
+            entity.HasIndex(e => new { e.MachineClientId, e.ThumbprintSha256 });
+            entity.Property(e => e.DisplayName).HasMaxLength(512);
+            entity.Property(e => e.ThumbprintSha256).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Subject).IsRequired().HasMaxLength(512);
+            entity.Property(e => e.Issuer).IsRequired().HasMaxLength(512);
+            entity.Property(e => e.SerialNumber).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.CertificatePem).IsRequired();
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(e => e.RevocationReason).HasMaxLength(512);
+            entity.HasOne<MachineClient>()
+                .WithMany()
+                .HasForeignKey(e => e.MachineClientId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

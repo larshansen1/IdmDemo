@@ -228,7 +228,55 @@ public sealed class AuthorizationServerServiceTests
         Assert.Equal(400, exception.StatusCode);
     }
 
-    private static AuthorizationServerService CreateService(IMachineClientRepository? repository = null)
+    [Fact]
+    public async Task IssueClientCredentialsTokenAsync_RegisteredCertificateRecord_ReturnsJwt()
+    {
+        using var certificate = CreateCertificate();
+        var client = MachineClient.Create("orders-service", "Orders Service");
+        client.AssignScopes(["orders.read"]);
+        var clientRepository = Substitute.For<IMachineClientRepository>();
+        clientRepository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        var certificateRepository = Substitute.For<IMachineClientCertificateRepository>();
+        certificateRepository
+            .GetByThumbprintAsync(client.Id, ComputeThumbprint(certificate), Arg.Any<CancellationToken>())
+            .Returns(CreateCertificateRecord(client, certificate));
+        var service = CreateService(clientRepository, certificateRepository);
+
+        var response = await service.IssueClientCredentialsTokenAsync(
+            "client_credentials",
+            client.ClientId,
+            "orders.read",
+            certificate);
+
+        Assert.Equal("orders.read", response.Scope);
+        Assert.NotEmpty(response.AccessToken);
+    }
+
+    [Fact]
+    public async Task IssueClientCredentialsTokenAsync_RevokedCertificateRecord_ThrowsInvalidClient()
+    {
+        using var certificate = CreateCertificate();
+        var client = MachineClient.Create("orders-service", "Orders Service");
+        var certificateRecord = CreateCertificateRecord(client, certificate);
+        certificateRecord.Revoke("rotated");
+        var clientRepository = Substitute.For<IMachineClientRepository>();
+        clientRepository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        var certificateRepository = Substitute.For<IMachineClientCertificateRepository>();
+        certificateRepository
+            .GetByThumbprintAsync(client.Id, ComputeThumbprint(certificate), Arg.Any<CancellationToken>())
+            .Returns(certificateRecord);
+        var service = CreateService(clientRepository, certificateRepository);
+
+        var exception = await Assert.ThrowsAsync<OAuthException>(() =>
+            service.IssueClientCredentialsTokenAsync("client_credentials", client.ClientId, null, certificate));
+
+        Assert.Equal("invalid_client", exception.Error);
+        Assert.Equal(401, exception.StatusCode);
+    }
+
+    private static AuthorizationServerService CreateService(
+        IMachineClientRepository? repository = null,
+        IMachineClientCertificateRepository? certificateRepository = null)
     {
         return new AuthorizationServerService(
             new AuthorizationServerOptions
@@ -238,6 +286,7 @@ public sealed class AuthorizationServerServiceTests
                 AccessTokenLifetimeSeconds = 3600,
             },
             repository ?? Substitute.For<IMachineClientRepository>(),
+            certificateRepository ?? Substitute.For<IMachineClientCertificateRepository>(),
             new TestSigningKeyStore(),
             Substitute.For<ILogger<AuthorizationServerService>>());
     }
@@ -247,6 +296,25 @@ public sealed class AuthorizationServerServiceTests
         var client = MachineClient.Create("orders-service", "Orders Service");
         client.UpdateCertificate(Convert.ToHexString(SHA256.HashData(certificate.RawData)), certificate.Subject, certificate.NotAfter);
         return client;
+    }
+
+    private static MachineClientCertificate CreateCertificateRecord(MachineClient client, X509Certificate2 certificate)
+    {
+        return MachineClientCertificate.Create(
+            client.Id,
+            "test certificate",
+            ComputeThumbprint(certificate),
+            certificate.Subject,
+            certificate.Issuer,
+            certificate.SerialNumber,
+            certificate.NotBefore,
+            certificate.NotAfter,
+            certificate.ExportCertificatePem());
+    }
+
+    private static string ComputeThumbprint(X509Certificate2 certificate)
+    {
+        return Convert.ToHexString(SHA256.HashData(certificate.RawData));
     }
 
     private static X509Certificate2 CreateCertificate(string subjectName = "orders-service")

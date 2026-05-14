@@ -13,6 +13,12 @@ coverage/
 *.trx
 *.xml
 
+## Local development key material
+signing-key.json
+certificate-authority.json
+src/Backend.Api/signing-key.json
+src/Backend.Api/certificate-authority.json
+
 ## SQLite
 *.db
 *.db-shm

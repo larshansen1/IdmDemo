@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(new AuthorizationServerOptions());
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMachineClientService, MachineClientService>();
+        services.AddScoped<IMachineClientCertificateService, MachineClientCertificateService>();
         services.AddScoped<IAuthorizationServerService, AuthorizationServerService>();
 
         return services;
@@ -25,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(authorizationServerOptions);
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMachineClientService, MachineClientService>();
+        services.AddScoped<IMachineClientCertificateService, MachineClientCertificateService>();
         services.AddScoped<IAuthorizationServerService, AuthorizationServerService>();
 
         return services;

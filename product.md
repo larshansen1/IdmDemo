@@ -306,15 +306,16 @@ The system should eventually support:
 Possible certificate endpoints:
 
 ```http
-POST /clients/{id}/certificates
-GET  /clients/{id}/certificates
-GET  /clients/{id}/certificates/{certificateId}
-POST /clients/{id}/certificates/{certificateId}/revoke
+POST /scim/v2/Clients/{id}/Certificates
+GET  /scim/v2/Clients/{id}/Certificates
+GET  /scim/v2/Clients/{id}/Certificates/{certificateId}
+POST /scim/v2/Clients/{id}/Certificates/{certificateId}/Revoke
 ```
 
 ### Design Note
 
 A separate certificate lifecycle design must be completed before implementing this epic.
+The initial design is documented in `docs/epic-3-certificate-lifecycle.md`.
 
 The design should decide whether the system uses:
 

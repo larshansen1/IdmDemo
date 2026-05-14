@@ -13,11 +13,13 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     private readonly string _dbPath;
     private readonly string _signingKeyPath;
+    private readonly string _certificateAuthorityPath;
 
     public TestWebApplicationFactory()
     {
         this._dbPath = Path.Combine(Path.GetTempPath(), $"idm_test_{Guid.NewGuid():N}.db");
         this._signingKeyPath = Path.Combine(Path.GetTempPath(), $"idm_test_signing_{Guid.NewGuid():N}.json");
+        this._certificateAuthorityPath = Path.Combine(Path.GetTempPath(), $"idm_test_ca_{Guid.NewGuid():N}.json");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -32,6 +34,7 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("AuthorizationServer:SigningKeyPath", this._signingKeyPath);
         builder.UseSetting("AuthorizationServer:EnableForwardedClientCertificate", "true");
         builder.UseSetting("AuthorizationServer:ForwardedClientCertificateHeader", "X-Client-Cert");
+        builder.UseSetting("CertificateAuthority:KeyPath", this._certificateAuthorityPath);
 
         builder.ConfigureServices(services =>
         {
@@ -54,6 +57,11 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
         if (disposing && File.Exists(this._signingKeyPath))
         {
             File.Delete(this._signingKeyPath);
+        }
+
+        if (disposing && File.Exists(this._certificateAuthorityPath))
+        {
+            File.Delete(this._certificateAuthorityPath);
         }
     }
 }

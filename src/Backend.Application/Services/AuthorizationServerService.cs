@@ -18,18 +18,21 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
 
     private readonly AuthorizationServerOptions _options;
     private readonly IMachineClientRepository _clientRepository;
+    private readonly IMachineClientCertificateRepository _certificateRepository;
     private readonly IJwtSigningKeyStore _signingKeyStore;
     private readonly ILogger<AuthorizationServerService> _logger;
 
     public AuthorizationServerService(
         AuthorizationServerOptions options,
         IMachineClientRepository clientRepository,
+        IMachineClientCertificateRepository certificateRepository,
         IJwtSigningKeyStore signingKeyStore,
         ILogger<AuthorizationServerService> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         this._options = options;
         this._clientRepository = clientRepository;
+        this._certificateRepository = certificateRepository;
         this._signingKeyStore = signingKeyStore;
         this._logger = logger;
     }
@@ -165,6 +168,19 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         }
     }
 
+    private static void ValidateRegisteredCertificate(MachineClientCertificate certificate)
+    {
+        if (certificate.Status == MachineClientCertificateStatus.Revoked)
+        {
+            throw new OAuthException("invalid_client", "Client certificate is revoked.", _unauthorizedStatusCode);
+        }
+
+        if (!certificate.IsUsableAt(DateTimeOffset.UtcNow))
+        {
+            throw new OAuthException("invalid_client", "Client certificate is expired.", _unauthorizedStatusCode);
+        }
+    }
+
     private static string CreateEncodedHeader(JwtSigningKey key)
     {
         var header = new Dictionary<string, object>
@@ -239,8 +255,27 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             throw new OAuthException("invalid_client", "Client authentication failed.", _unauthorizedStatusCode);
         }
 
-        ValidateClientCertificate(client, clientCertificate);
+        await this.ValidateClientCertificateAsync(client, clientCertificate, cancellationToken).ConfigureAwait(false);
         return client;
+    }
+
+    private async Task ValidateClientCertificateAsync(
+        MachineClient client,
+        X509Certificate2 clientCertificate,
+        CancellationToken cancellationToken)
+    {
+        var actualThumbprint = ComputeCertificateThumbprintHex(clientCertificate);
+        var registeredCertificate = await this._certificateRepository
+            .GetByThumbprintAsync(client.Id, actualThumbprint, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (registeredCertificate is not null)
+        {
+            ValidateRegisteredCertificate(registeredCertificate);
+            return;
+        }
+
+        ValidateClientCertificate(client, clientCertificate);
     }
 
     private async Task<string> CreateJwtAsync(
