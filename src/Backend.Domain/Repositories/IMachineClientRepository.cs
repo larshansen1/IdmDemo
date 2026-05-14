@@ -6,6 +6,8 @@ public interface IMachineClientRepository
 {
     Task<MachineClient?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task<MachineClient?> GetByClientIdAsync(string clientId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<MachineClient>> ListAsync(string? clientIdFilter, CancellationToken cancellationToken = default);
 
     Task<bool> ExistsByClientIdAsync(string clientId, CancellationToken cancellationToken = default);

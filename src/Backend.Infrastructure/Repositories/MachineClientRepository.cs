@@ -21,6 +21,13 @@ public sealed class MachineClientRepository : IMachineClientRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<MachineClient?> GetByClientIdAsync(string clientId, CancellationToken cancellationToken = default)
+    {
+        return await this._context.MachineClients
+            .FirstOrDefaultAsync(c => c.ClientId == clientId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<MachineClient>> ListAsync(string? clientIdFilter, CancellationToken cancellationToken = default)
     {
         var query = this._context.MachineClients.AsQueryable();

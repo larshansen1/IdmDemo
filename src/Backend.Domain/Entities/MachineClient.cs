@@ -8,6 +8,8 @@ public sealed class MachineClient
     private MachineClient()
     {
         this.ClientId = string.Empty;
+        this.AssignedScopeValues = string.Empty;
+        this.AssignedRoleValues = string.Empty;
     }
 
     public Guid Id { get; private set; }
@@ -17,6 +19,16 @@ public sealed class MachineClient
     public string? DisplayName { get; private set; }
 
     public bool Active { get; private set; }
+
+    public string? CertificateThumbprintSha256 { get; private set; }
+
+    public string? CertificateSubject { get; private set; }
+
+    public DateTimeOffset? CertificateExpiresAt { get; private set; }
+
+    public string AssignedScopeValues { get; private set; }
+
+    public string AssignedRoleValues { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
 
@@ -29,6 +41,8 @@ public sealed class MachineClient
             Id = Guid.NewGuid(),
             ClientId = clientId,
             DisplayName = displayName,
+            AssignedScopeValues = string.Empty,
+            AssignedRoleValues = string.Empty,
             Active = true,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
@@ -43,6 +57,38 @@ public sealed class MachineClient
         this.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    public void UpdateCertificate(string? thumbprintSha256, string? subject, DateTimeOffset? expiresAt)
+    {
+        this.CertificateThumbprintSha256 = thumbprintSha256;
+        this.CertificateSubject = subject;
+        this.CertificateExpiresAt = expiresAt;
+        this.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void AssignScopes(IReadOnlyCollection<string> scopes)
+    {
+        ArgumentNullException.ThrowIfNull(scopes);
+        this.AssignedScopeValues = string.Join(' ', scopes);
+        this.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void AssignRoles(IReadOnlyCollection<string> roles)
+    {
+        ArgumentNullException.ThrowIfNull(roles);
+        this.AssignedRoleValues = string.Join(' ', roles);
+        this.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public IReadOnlyList<string> GetAssignedScopes()
+    {
+        return SplitValues(this.AssignedScopeValues);
+    }
+
+    public IReadOnlyList<string> GetAssignedRoles()
+    {
+        return SplitValues(this.AssignedRoleValues);
+    }
+
     public void Activate()
     {
         this.Active = true;
@@ -53,5 +99,10 @@ public sealed class MachineClient
     {
         this.Active = false;
         this.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static string[] SplitValues(string values)
+    {
+        return values.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 }

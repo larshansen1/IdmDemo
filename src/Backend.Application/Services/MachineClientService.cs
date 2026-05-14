@@ -24,6 +24,9 @@ public sealed partial class MachineClientService : IMachineClientService
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateClientId(request.ClientId);
+        var certificateThumbprint = NormalizeThumbprint(request.CertificateThumbprintSha256);
+        var assignedScopes = ValidateNames(request.AssignedScopes, "assignedScopes");
+        var assignedRoles = ValidateNames(request.AssignedRoles, "assignedRoles");
 
         if (await this._clientRepository.ExistsByClientIdAsync(request.ClientId!, cancellationToken).ConfigureAwait(false))
         {
@@ -31,6 +34,9 @@ public sealed partial class MachineClientService : IMachineClientService
         }
 
         var client = MachineClient.Create(request.ClientId!, request.DisplayName);
+        client.UpdateCertificate(certificateThumbprint, request.CertificateSubject, request.CertificateExpiresAt);
+        client.AssignScopes(assignedScopes);
+        client.AssignRoles(assignedRoles);
 
         if (request.Active == false)
         {
@@ -84,6 +90,9 @@ public sealed partial class MachineClientService : IMachineClientService
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateClientId(request.ClientId);
+        var certificateThumbprint = NormalizeThumbprint(request.CertificateThumbprintSha256);
+        var assignedScopes = ValidateNames(request.AssignedScopes, "assignedScopes");
+        var assignedRoles = ValidateNames(request.AssignedRoles, "assignedRoles");
 
         var client = await this._clientRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false)
             ?? throw new NotFoundException("Client", id.ToString());
@@ -97,6 +106,9 @@ public sealed partial class MachineClientService : IMachineClientService
         }
 
         client.Update(request.ClientId!, request.DisplayName, request.Active);
+        client.UpdateCertificate(certificateThumbprint, request.CertificateSubject, request.CertificateExpiresAt);
+        client.AssignScopes(assignedScopes);
+        client.AssignRoles(assignedRoles);
 
         await this._clientRepository.UpdateAsync(client, cancellationToken).ConfigureAwait(false);
 
@@ -175,25 +187,35 @@ public sealed partial class MachineClientService : IMachineClientService
         switch (op.Path.ToUpperInvariant())
         {
             case "DISPLAYNAME":
-                var displayName = op.Value.ValueKind == JsonValueKind.Null
-                    ? null
-                    : op.Value.GetString();
-                client.Update(client.ClientId, displayName, client.Active);
+                ReplaceDisplayName(client, op.Value);
                 break;
 
             case "ACTIVE":
-                if (op.Value.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-                {
-                    throw new ValidationException("Value for 'active' must be a boolean.");
-                }
-
-                client.Update(client.ClientId, client.DisplayName, op.Value.GetBoolean());
+                ReplaceActive(client, op.Value);
                 break;
 
             case "CLIENTID":
-                var newClientId = op.Value.GetString();
-                ValidateClientId(newClientId);
-                client.Update(newClientId!, client.DisplayName, client.Active);
+                ReplaceClientId(client, op.Value);
+                break;
+
+            case "CERTIFICATETHUMBPRINTSHA256":
+                ReplaceCertificateThumbprint(client, op.Value);
+                break;
+
+            case "CERTIFICATESUBJECT":
+                ReplaceCertificateSubject(client, op.Value);
+                break;
+
+            case "CERTIFICATEEXPIRESAT":
+                ReplaceCertificateExpiry(client, op.Value);
+                break;
+
+            case "ASSIGNEDSCOPES":
+                ReplaceAssignedScopes(client, op.Value);
+                break;
+
+            case "ASSIGNEDROLES":
+                ReplaceAssignedRoles(client, op.Value);
                 break;
 
             default:
@@ -209,6 +231,11 @@ public sealed partial class MachineClientService : IMachineClientService
             ClientId = client.ClientId,
             DisplayName = client.DisplayName,
             Active = client.Active,
+            CertificateThumbprintSha256 = client.CertificateThumbprintSha256,
+            CertificateSubject = client.CertificateSubject,
+            CertificateExpiresAt = client.CertificateExpiresAt,
+            AssignedScopes = client.GetAssignedScopes(),
+            AssignedRoles = client.GetAssignedRoles(),
             Meta = new ScimMeta
             {
                 ResourceType = "Client",
@@ -217,5 +244,123 @@ public sealed partial class MachineClientService : IMachineClientService
                 Location = $"/scim/v2/Clients/{client.Id}",
             },
         };
+    }
+
+    private static string? NormalizeThumbprint(string? thumbprint)
+    {
+        if (string.IsNullOrWhiteSpace(thumbprint))
+        {
+            return null;
+        }
+
+        var normalized = thumbprint.Replace(":", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
+        if (normalized.Length != 64 || normalized.Any(c => !Uri.IsHexDigit(c)))
+        {
+            throw new ValidationException("certificateThumbprintSha256 must be a 64-character hexadecimal SHA-256 thumbprint.");
+        }
+
+        return normalized;
+    }
+
+    private static List<string> ValidateNames(IReadOnlyList<string> values, string fieldName)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        var normalized = new List<string>();
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new ValidationException($"{fieldName} must not contain empty values.");
+            }
+
+            if (value.Length > 128)
+            {
+                throw new ValidationException($"{fieldName} values must not exceed 128 characters.");
+            }
+
+            if (value.Any(char.IsWhiteSpace))
+            {
+                throw new ValidationException($"{fieldName} values must not contain whitespace.");
+            }
+
+            normalized.Add(value);
+        }
+
+        return normalized.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+    }
+
+    private static List<string> ReadStringArray(JsonElement value, string fieldName)
+    {
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            throw new ValidationException($"{fieldName} must be an array of strings.");
+        }
+
+        var values = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                throw new ValidationException($"{fieldName} must be an array of strings.");
+            }
+
+            values.Add(item.GetString()!);
+        }
+
+        return values;
+    }
+
+    private static void ReplaceActive(MachineClient client, JsonElement value)
+    {
+        if (value.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+        {
+            throw new ValidationException("Value for 'active' must be a boolean.");
+        }
+
+        client.Update(client.ClientId, client.DisplayName, value.GetBoolean());
+    }
+
+    private static void ReplaceAssignedRoles(MachineClient client, JsonElement value)
+    {
+        client.AssignRoles(ValidateNames(ReadStringArray(value, "assignedRoles"), "assignedRoles"));
+    }
+
+    private static void ReplaceAssignedScopes(MachineClient client, JsonElement value)
+    {
+        client.AssignScopes(ValidateNames(ReadStringArray(value, "assignedScopes"), "assignedScopes"));
+    }
+
+    private static void ReplaceCertificateExpiry(MachineClient client, JsonElement value)
+    {
+        client.UpdateCertificate(
+            client.CertificateThumbprintSha256,
+            client.CertificateSubject,
+            value.ValueKind == JsonValueKind.Null ? null : value.GetDateTimeOffset());
+    }
+
+    private static void ReplaceCertificateSubject(MachineClient client, JsonElement value)
+    {
+        client.UpdateCertificate(client.CertificateThumbprintSha256, value.GetString(), client.CertificateExpiresAt);
+    }
+
+    private static void ReplaceCertificateThumbprint(MachineClient client, JsonElement value)
+    {
+        client.UpdateCertificate(NormalizeThumbprint(value.GetString()), client.CertificateSubject, client.CertificateExpiresAt);
+    }
+
+    private static void ReplaceClientId(MachineClient client, JsonElement value)
+    {
+        var newClientId = value.GetString();
+        ValidateClientId(newClientId);
+        client.Update(newClientId!, client.DisplayName, client.Active);
+    }
+
+    private static void ReplaceDisplayName(MachineClient client, JsonElement value)
+    {
+        var displayName = value.ValueKind == JsonValueKind.Null
+            ? null
+            : value.GetString();
+        client.Update(client.ClientId, displayName, client.Active);
     }
 }

@@ -1,6 +1,8 @@
 using Backend.Api.Extensions;
 using Backend.Api.Middleware;
+using Backend.Api.Services;
 using Backend.Application.Extensions;
+using Backend.Application.Models.Auth;
 using Backend.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using OpenTelemetry.Resources;
@@ -33,8 +35,16 @@ builder.Services.AddSwaggerGen(options =>
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? "Data Source=idm.db";
 
-builder.Services.AddInfrastructure(connectionString);
-builder.Services.AddApplication();
+var authorizationServerOptions = builder.Configuration
+    .GetSection("AuthorizationServer")
+    .Get<AuthorizationServerOptions>()
+    ?? new AuthorizationServerOptions();
+var signingKeyPath = builder.Configuration["AuthorizationServer:SigningKeyPath"]
+    ?? Path.Combine(builder.Environment.ContentRootPath, "signing-key.json");
+
+builder.Services.AddInfrastructure(connectionString, signingKeyPath);
+builder.Services.AddApplication(authorizationServerOptions);
+builder.Services.AddSingleton<IClientCertificateReader, ClientCertificateReader>();
 
 builder.Services.AddExceptionHandler<ScimExceptionHandler>();
 builder.Services.AddProblemDetails();

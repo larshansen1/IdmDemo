@@ -94,27 +94,191 @@ The authorization server should provide:
 
 ```http
 GET  /.well-known/openid-configuration
+GET  /.well-known/jwks.json
 POST /connect/token
 ```
 
-The token endpoint should support machine client authentication using mTLS.
+The token endpoint should support the OAuth 2.0 client credentials flow for registered machine clients using mutual TLS client authentication, aligned with RFC 8705.
+
+The first implementation should issue JWT access tokens. Tokens should be certificate-bound using the SHA-256 thumbprint of the client certificate in the JWT confirmation claim:
+
+```json
+{
+  "cnf": {
+    "x5t#S256": "<base64url-sha256-certificate-thumbprint>"
+  }
+}
+```
 
 ### Requirements
 
 The authorization server should:
 
-- Authenticate registered machine clients using mTLS
-- Validate the presented client certificate against registered client certificate material
-- Issue access tokens for authenticated clients
+- Expose OAuth/OIDC-style authorization server metadata from `/.well-known/openid-configuration`
+- Expose public JWT signing keys from `/.well-known/jwks.json`
+- Accept `application/x-www-form-urlencoded` token requests at `/connect/token`
+- Support `grant_type=client_credentials`
+- Require `client_id` on token requests
+- Authenticate registered machine clients using mutual TLS
+- Validate the presented client certificate against registered certificate metadata for the `client_id`
+- Match registered certificates using the certificate SHA-256 thumbprint
+- Reject inactive clients
+- Reject missing, malformed, expired, or unregistered client certificates
+- Issue short-lived JWT access tokens for authenticated clients
+- Bind issued JWT access tokens to the presented client certificate using `cnf.x5t#S256`
 - Include granted global roles and scopes in issued tokens
 - Reject requests for scopes not assigned to the client
-- Expose public signing keys through a JWKS endpoint if JWT access tokens are used
+- Return OAuth-style token endpoint errors instead of SCIM error envelopes
+- Keep administrative SCIM APIs protected by API-key authentication
+- Keep discovery and JWKS endpoints public
 
-Suggested endpoint:
+### Token Request
+
+The token endpoint should use the closest practical shape to RFC 8705 for this project:
 
 ```http
-GET /.well-known/jwks.json
+POST /connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&
+client_id=orders-service&
+scope=orders.read orders.write
 ```
+
+The client certificate is supplied by the TLS layer. The request body still includes `client_id` so the authorization server can locate the registered machine client and compare the presented certificate thumbprint to the expected certificate thumbprint.
+
+### Token Response
+
+Successful responses should follow OAuth 2.0 token response conventions:
+
+```json
+{
+  "access_token": "<jwt>",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "orders.read orders.write"
+}
+```
+
+The first JWT claim set should include:
+
+- `iss`: configured issuer URL
+- `sub`: machine client record id or stable client subject
+- `client_id`: external machine client identifier
+- `aud`: configured resource audience
+- `jti`: unique token id
+- `iat`: issued-at timestamp
+- `nbf`: not-before timestamp
+- `exp`: expiration timestamp
+- `scope`: space-delimited granted scopes
+- `roles`: granted global roles
+- `cnf.x5t#S256`: SHA-256 thumbprint of the presented client certificate
+
+### Error Responses
+
+The token endpoint should return OAuth-style JSON errors:
+
+```json
+{
+  "error": "invalid_client",
+  "error_description": "Client certificate is missing or invalid."
+}
+```
+
+Initial error mapping:
+
+| Scenario | HTTP status | Error |
+|---|---:|---|
+| Missing or invalid client authentication | 401 | `invalid_client` |
+| Unknown or inactive client | 401 | `invalid_client` |
+| Missing or unsupported grant type | 400 | `unsupported_grant_type` or `invalid_request` |
+| Requested scope is not assigned to the client | 400 | `invalid_scope` |
+| Malformed request | 400 | `invalid_request` |
+
+### Signing Keys
+
+JWT signing keys should be generated locally by the application. The implementation should provide a development-friendly local key store and expose the active public signing key through JWKS.
+
+Key handling requirements:
+
+- Use asymmetric signing keys.
+- Persist generated keys locally so tokens remain verifiable across application restarts.
+- Include `kid` in JWT headers and JWKS entries.
+- Support an active signing key.
+- Keep private key material out of API responses and logs.
+- Leave key rotation as a later enhancement unless it is cheap to support without expanding scope.
+
+### Issuer and Audience Recommendation
+
+The issuer should be configured as the externally visible authorization server origin.
+
+Recommended default:
+
+```json
+{
+  "AuthorizationServer": {
+    "Issuer": "https://localhost:5001",
+    "Audience": "idm-demo-api",
+    "AccessTokenLifetimeSeconds": 3600
+  }
+}
+```
+
+The audience should initially be a single configured resource audience. Per-client or per-resource audiences are out of scope for Epic 2.
+
+### Mutual TLS Deployment Model
+
+Development should support direct TLS termination in Kestrel for local experimentation.
+
+Test and production should support reverse-proxy TLS termination. In that model, the proxy is responsible for validating the TLS connection and forwarding the client certificate to the API using a configured header.
+
+Proxy-mode requirements:
+
+- Trust forwarded client certificate headers only when explicitly enabled.
+- Document that the API must only accept forwarded certificate headers from a trusted proxy.
+- Decode and parse the forwarded certificate into an X.509 certificate before validation.
+- Use the same certificate thumbprint validation path for direct and proxy modes.
+
+### Minimal Certificate Registration
+
+Certificate lifecycle remains out of scope until Epic 3. Epic 2 should add only the minimum certificate metadata needed to authenticate machine clients.
+
+Machine clients should support storing:
+
+- Client certificate SHA-256 thumbprint
+- Optional certificate subject
+- Optional certificate expiry
+
+The SCIM-shaped client API may accept and return this public certificate metadata. It must not issue certificates, rotate certificates, revoke certificates, generate client private keys, or manage CSRs.
+
+### Minimal Roles and Scopes
+
+Epic 2 should include the minimum model needed to issue useful access tokens:
+
+- Global scope definitions
+- Global role definitions
+- Machine-client assigned scopes
+- Machine-client assigned roles
+
+The implementation does not need full user role assignment, tenant-specific authorization, delegated user consent, resource-specific scopes, or a policy engine. Those remain part of later access management work.
+
+### Testing Requirements
+
+Epic 2 tests should cover:
+
+- Discovery metadata returns the configured issuer, token endpoint, JWKS URI, supported grant type, supported token endpoint auth method, and `tls_client_certificate_bound_access_tokens=true`
+- JWKS returns the active public signing key and no private key material
+- Valid mTLS client credentials request returns a JWT access token
+- Token contains expected standard claims, granted roles/scopes, and `cnf.x5t#S256`
+- Missing certificate returns `invalid_client`
+- Unknown client returns `invalid_client`
+- Thumbprint mismatch returns `invalid_client`
+- Inactive client returns `invalid_client`
+- Unsupported grant type returns `unsupported_grant_type`
+- Unassigned requested scope returns `invalid_scope`
+- Token endpoint does not require the administrative API key
+- Administrative SCIM endpoints still require the administrative API key
+- Proxy-forwarded certificate mode works only when explicitly enabled
 
 ### Clarification
 

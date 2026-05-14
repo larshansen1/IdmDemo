@@ -33,6 +33,10 @@ public sealed class AppDbContext : DbContext
             entity.HasIndex(e => e.ClientId).IsUnique();
             entity.Property(e => e.ClientId).IsRequired().HasMaxLength(256);
             entity.Property(e => e.DisplayName).HasMaxLength(512);
+            entity.Property(e => e.CertificateThumbprintSha256).HasMaxLength(64);
+            entity.Property(e => e.CertificateSubject).HasMaxLength(512);
+            entity.Property(e => e.AssignedScopeValues).HasMaxLength(2048);
+            entity.Property(e => e.AssignedRoleValues).HasMaxLength(2048);
         });
     }
 }

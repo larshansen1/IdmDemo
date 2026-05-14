@@ -22,7 +22,8 @@ public sealed class ApiKeyMiddleware
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (context.Request.Path.StartsWithSegments("/.well-known", StringComparison.OrdinalIgnoreCase))
+        if (context.Request.Path.StartsWithSegments("/.well-known", StringComparison.OrdinalIgnoreCase) ||
+            context.Request.Path.StartsWithSegments("/connect/token", StringComparison.OrdinalIgnoreCase))
         {
             await this._next(context).ConfigureAwait(false);
             return;

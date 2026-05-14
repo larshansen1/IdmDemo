@@ -12,10 +12,12 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
     public const string TestApiKey = "test-api-key";
 
     private readonly string _dbPath;
+    private readonly string _signingKeyPath;
 
     public TestWebApplicationFactory()
     {
         this._dbPath = Path.Combine(Path.GetTempPath(), $"idm_test_{Guid.NewGuid():N}.db");
+        this._signingKeyPath = Path.Combine(Path.GetTempPath(), $"idm_test_signing_{Guid.NewGuid():N}.json");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -24,6 +26,12 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.UseSetting("AdminApi:ApiKey", TestApiKey);
         builder.UseSetting("ConnectionStrings:Default", $"Data Source={this._dbPath}");
+        builder.UseSetting("AuthorizationServer:Issuer", "https://idmdemo.test");
+        builder.UseSetting("AuthorizationServer:Audience", "idm-demo-api");
+        builder.UseSetting("AuthorizationServer:AccessTokenLifetimeSeconds", "3600");
+        builder.UseSetting("AuthorizationServer:SigningKeyPath", this._signingKeyPath);
+        builder.UseSetting("AuthorizationServer:EnableForwardedClientCertificate", "true");
+        builder.UseSetting("AuthorizationServer:ForwardedClientCertificateHeader", "X-Client-Cert");
 
         builder.ConfigureServices(services =>
         {
@@ -41,6 +49,11 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
         if (disposing && File.Exists(this._dbPath))
         {
             File.Delete(this._dbPath);
+        }
+
+        if (disposing && File.Exists(this._signingKeyPath))
+        {
+            File.Delete(this._signingKeyPath);
         }
     }
 }

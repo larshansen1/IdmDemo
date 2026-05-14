@@ -40,6 +40,33 @@ public sealed class MachineClientServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_WithCertificateAndAssignments_ReturnsMetadata()
+    {
+        var repo = Substitute.For<IMachineClientRepository>();
+        repo.ExistsByClientIdAsync("orders-service", Arg.Any<CancellationToken>()).Returns(false);
+        var service = CreateService(repo);
+        var expiresAt = DateTimeOffset.UtcNow.AddDays(30);
+
+        var result = await service.CreateAsync(new CreateClientRequest
+        {
+            ClientId = "orders-service",
+            CertificateThumbprintSha256 = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99",
+            CertificateSubject = "CN=orders",
+            CertificateExpiresAt = expiresAt,
+            AssignedScopes = ["api.read", "api.write", "api.read"],
+            AssignedRoles = ["writer", "reader"],
+        });
+
+        Assert.Equal(
+            "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899",
+            result.CertificateThumbprintSha256);
+        Assert.Equal("CN=orders", result.CertificateSubject);
+        Assert.Equal(expiresAt, result.CertificateExpiresAt);
+        Assert.Equal(["api.read", "api.write"], result.AssignedScopes);
+        Assert.Equal(["reader", "writer"], result.AssignedRoles);
+    }
+
+    [Fact]
     public async Task CreateAsync_DuplicateClientId_ThrowsConflictException()
     {
         var repo = Substitute.For<IMachineClientRepository>();
@@ -87,6 +114,32 @@ public sealed class MachineClientServiceTests
 
         await Assert.ThrowsAsync<ValidationException>(() =>
             service.CreateAsync(new CreateClientRequest { ClientId = "orders\0service" }));
+    }
+
+    [Fact]
+    public async Task CreateAsync_InvalidCertificateThumbprint_ThrowsValidationException()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            service.CreateAsync(new CreateClientRequest
+            {
+                ClientId = "orders-service",
+                CertificateThumbprintSha256 = "not-a-thumbprint",
+            }));
+    }
+
+    [Fact]
+    public async Task CreateAsync_AssignedScopeWithWhitespace_ThrowsValidationException()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            service.CreateAsync(new CreateClientRequest
+            {
+                ClientId = "orders-service",
+                AssignedScopes = ["api read"],
+            }));
     }
 
     [Fact]
@@ -168,6 +221,33 @@ public sealed class MachineClientServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WithCertificateAndAssignments_ReturnsMetadata()
+    {
+        var client = MakeClient("orders-service");
+        var repo = Substitute.For<IMachineClientRepository>();
+        repo.GetByIdAsync(client.Id, Arg.Any<CancellationToken>()).Returns(client);
+        var service = CreateService(repo);
+        var expiresAt = DateTimeOffset.UtcNow.AddDays(60);
+
+        var result = await service.UpdateAsync(client.Id, new UpdateClientRequest
+        {
+            ClientId = "orders-service",
+            DisplayName = "Orders Service Updated",
+            Active = true,
+            CertificateThumbprintSha256 = "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899",
+            CertificateSubject = "CN=orders-updated",
+            CertificateExpiresAt = expiresAt,
+            AssignedScopes = ["payments.read"],
+            AssignedRoles = ["auditor"],
+        });
+
+        Assert.Equal("CN=orders-updated", result.CertificateSubject);
+        Assert.Equal(expiresAt, result.CertificateExpiresAt);
+        Assert.Equal(["payments.read"], result.AssignedScopes);
+        Assert.Equal(["auditor"], result.AssignedRoles);
+    }
+
+    [Fact]
     public async Task UpdateAsync_ChangeClientIdToExisting_ThrowsConflictException()
     {
         var client = MakeClient("orders-service");
@@ -216,6 +296,32 @@ public sealed class MachineClientServiceTests
 
         Assert.Equal("New Name", result.DisplayName);
         await repo.Received(1).UpdateAsync(client, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PatchAsync_ReplaceClientId_UpdatesClientId()
+    {
+        var client = MakeClient("orders-service");
+        var repo = Substitute.For<IMachineClientRepository>();
+        repo.GetByIdAsync(client.Id, Arg.Any<CancellationToken>()).Returns(client);
+        var service = CreateService(repo);
+
+        var patch = new ScimPatchRequest
+        {
+            Operations =
+            [
+                new ScimPatchOperation
+                {
+                    Op = "replace",
+                    Path = "clientId",
+                    Value = System.Text.Json.JsonSerializer.SerializeToElement("orders-v2"),
+                },
+            ],
+        };
+
+        var result = await service.PatchAsync(client.Id, patch);
+
+        Assert.Equal("orders-v2", result.ClientId);
     }
 
     [Fact]
@@ -268,6 +374,109 @@ public sealed class MachineClientServiceTests
         var result = await service.PatchAsync(client.Id, patch);
 
         Assert.True(result.Active);
+    }
+
+    [Fact]
+    public async Task PatchAsync_ReplaceCertificateMetadata_UpdatesCertificateMetadata()
+    {
+        var client = MakeClient("orders-service");
+        var repo = Substitute.For<IMachineClientRepository>();
+        repo.GetByIdAsync(client.Id, Arg.Any<CancellationToken>()).Returns(client);
+        var service = CreateService(repo);
+        var expiresAt = DateTimeOffset.UtcNow.AddDays(90);
+
+        var patch = new ScimPatchRequest
+        {
+            Operations =
+            [
+                new ScimPatchOperation
+                {
+                    Op = "replace",
+                    Path = "certificateThumbprintSha256",
+                    Value = System.Text.Json.JsonSerializer.SerializeToElement(
+                        "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"),
+                },
+                new ScimPatchOperation
+                {
+                    Op = "replace",
+                    Path = "certificateSubject",
+                    Value = System.Text.Json.JsonSerializer.SerializeToElement("CN=orders"),
+                },
+                new ScimPatchOperation
+                {
+                    Op = "replace",
+                    Path = "certificateExpiresAt",
+                    Value = System.Text.Json.JsonSerializer.SerializeToElement(expiresAt),
+                },
+            ],
+        };
+
+        var result = await service.PatchAsync(client.Id, patch);
+
+        Assert.Equal(
+            "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899",
+            result.CertificateThumbprintSha256);
+        Assert.Equal("CN=orders", result.CertificateSubject);
+        Assert.Equal(expiresAt, result.CertificateExpiresAt);
+    }
+
+    [Fact]
+    public async Task PatchAsync_ReplaceAssignedScopesAndRoles_UpdatesAssignments()
+    {
+        var client = MakeClient("orders-service");
+        var repo = Substitute.For<IMachineClientRepository>();
+        repo.GetByIdAsync(client.Id, Arg.Any<CancellationToken>()).Returns(client);
+        var service = CreateService(repo);
+        string[] scopes = ["api.write", "api.read", "api.read"];
+        string[] roles = ["writer", "reader"];
+
+        var patch = new ScimPatchRequest
+        {
+            Operations =
+            [
+                new ScimPatchOperation
+                {
+                    Op = "replace",
+                    Path = "assignedScopes",
+                    Value = System.Text.Json.JsonSerializer.SerializeToElement(scopes),
+                },
+                new ScimPatchOperation
+                {
+                    Op = "replace",
+                    Path = "assignedRoles",
+                    Value = System.Text.Json.JsonSerializer.SerializeToElement(roles),
+                },
+            ],
+        };
+
+        var result = await service.PatchAsync(client.Id, patch);
+
+        Assert.Equal(["api.read", "api.write"], result.AssignedScopes);
+        Assert.Equal(["reader", "writer"], result.AssignedRoles);
+    }
+
+    [Fact]
+    public async Task PatchAsync_AssignedScopesNotArray_ThrowsValidationException()
+    {
+        var client = MakeClient();
+        var repo = Substitute.For<IMachineClientRepository>();
+        repo.GetByIdAsync(client.Id, Arg.Any<CancellationToken>()).Returns(client);
+        var service = CreateService(repo);
+
+        var patch = new ScimPatchRequest
+        {
+            Operations =
+            [
+                new ScimPatchOperation
+                {
+                    Op = "replace",
+                    Path = "assignedScopes",
+                    Value = System.Text.Json.JsonSerializer.SerializeToElement("api.read"),
+                },
+            ],
+        };
+
+        await Assert.ThrowsAsync<ValidationException>(() => service.PatchAsync(client.Id, patch));
     }
 
     [Fact]

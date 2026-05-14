@@ -1,6 +1,8 @@
 using Backend.Domain.Repositories;
+using Backend.Domain.Services;
 using Backend.Infrastructure.Persistence;
 using Backend.Infrastructure.Repositories;
+using Backend.Infrastructure.Signing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,11 +12,17 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString)
     {
+        return AddInfrastructure(services, connectionString, Path.Combine(AppContext.BaseDirectory, "signing-key.json"));
+    }
+
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, string signingKeyPath)
+    {
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlite(connectionString));
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IMachineClientRepository, MachineClientRepository>();
+        services.AddSingleton<IJwtSigningKeyStore>(_ => new LocalJwtSigningKeyStore(signingKeyPath));
 
         return services;
     }
