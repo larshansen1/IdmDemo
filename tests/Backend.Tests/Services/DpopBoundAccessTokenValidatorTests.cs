@@ -78,10 +78,16 @@ public sealed class DpopBoundAccessTokenValidatorTests
         var boundValidator = new DpopBoundAccessTokenValidator(accessTokenValidator, dpopProofValidator);
         var clientRepository = Substitute.For<IMachineClientRepository>();
         var certificateRepository = Substitute.For<IMachineClientCertificateRepository>();
+        var roleRepository = Substitute.For<IGlobalRoleRepository>();
+        roleRepository.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+        var scopeRepository = Substitute.For<IGlobalScopeRepository>();
+        scopeRepository.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
         var authorizationServer = new AuthorizationServerService(
             options,
             clientRepository,
             certificateRepository,
+            roleRepository,
+            scopeRepository,
             signingKeyStore,
             dpopProofValidator,
             Substitute.For<ILogger<AuthorizationServerService>>());

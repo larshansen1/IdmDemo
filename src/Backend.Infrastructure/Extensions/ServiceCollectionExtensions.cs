@@ -41,6 +41,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IMachineClientRepository, MachineClientRepository>();
         services.AddScoped<IMachineClientCertificateRepository, MachineClientCertificateRepository>();
+        services.AddScoped<IGlobalRoleRepository, GlobalRoleRepository>();
+        services.AddScoped<IGlobalScopeRepository, GlobalScopeRepository>();
         services.AddSingleton<IJwtSigningKeyStore>(_ => new LocalJwtSigningKeyStore(signingKeyPath));
         services.AddSingleton<ILocalCertificateAuthority>(_ => new LocalDevelopmentCertificateAuthority(certificateAuthorityPath));
 

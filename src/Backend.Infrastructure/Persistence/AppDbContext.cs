@@ -14,6 +14,10 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<MachineClient> MachineClients { get; set; } = null!;
 
+    public DbSet<GlobalRole> GlobalRoles { get; set; } = null!;
+
+    public DbSet<GlobalScope> GlobalScopes { get; set; } = null!;
+
     public DbSet<MachineClientCertificate> MachineClientCertificates { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -27,6 +31,7 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.UserName).IsRequired().HasMaxLength(256);
             entity.Property(e => e.DisplayName).HasMaxLength(512);
             entity.Property(e => e.ExternalId).HasMaxLength(256);
+            entity.Property(e => e.AssignedRoleValues).HasMaxLength(2048);
         });
 
         modelBuilder.Entity<MachineClient>(entity =>
@@ -39,6 +44,24 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.CertificateSubject).HasMaxLength(512);
             entity.Property(e => e.AssignedScopeValues).HasMaxLength(2048);
             entity.Property(e => e.AssignedRoleValues).HasMaxLength(2048);
+        });
+
+        modelBuilder.Entity<GlobalRole>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Value).IsUnique();
+            entity.Property(e => e.Value).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.DisplayName).HasMaxLength(512);
+            entity.Property(e => e.Description).HasMaxLength(1024);
+        });
+
+        modelBuilder.Entity<GlobalScope>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Value).IsUnique();
+            entity.Property(e => e.Value).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.DisplayName).HasMaxLength(512);
+            entity.Property(e => e.Description).HasMaxLength(1024);
         });
 
         modelBuilder.Entity<MachineClientCertificate>(entity =>

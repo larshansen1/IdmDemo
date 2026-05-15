@@ -556,10 +556,22 @@ public sealed class MachineClientServiceTests
         await Assert.ThrowsAsync<NotFoundException>(() => service.DeleteAsync(Guid.NewGuid()));
     }
 
-    private static MachineClientService CreateService(IMachineClientRepository? repo = null, ILogger<MachineClientService>? logger = null)
+    private static MachineClientService CreateService(
+        IMachineClientRepository? repo = null,
+        IGlobalRoleRepository? roleRepository = null,
+        IGlobalScopeRepository? scopeRepository = null,
+        ILogger<MachineClientService>? logger = null)
     {
+        var roles = roleRepository ?? Substitute.For<IGlobalRoleRepository>();
+        roles.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        var scopes = scopeRepository ?? Substitute.For<IGlobalScopeRepository>();
+        scopes.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+
         return new MachineClientService(
             repo ?? Substitute.For<IMachineClientRepository>(),
+            roles,
+            scopes,
             logger ?? Substitute.For<ILogger<MachineClientService>>());
     }
 

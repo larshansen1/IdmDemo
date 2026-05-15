@@ -17,5 +17,7 @@ public sealed class UserResponse
 
     public bool Active { get; init; }
 
+    public IReadOnlyList<string> AssignedRoles { get; init; } = [];
+
     public ScimMeta Meta { get; init; } = new();
 }

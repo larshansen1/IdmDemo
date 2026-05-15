@@ -12,11 +12,16 @@ namespace Backend.Application.Services;
 public sealed partial class UserService : IUserService
 {
     private readonly IUserRepository _userRepository;
+    private readonly IGlobalRoleRepository _roleRepository;
     private readonly ILogger<UserService> _logger;
 
-    public UserService(IUserRepository userRepository, ILogger<UserService> logger)
+    public UserService(
+        IUserRepository userRepository,
+        IGlobalRoleRepository roleRepository,
+        ILogger<UserService> logger)
     {
         this._userRepository = userRepository;
+        this._roleRepository = roleRepository;
         this._logger = logger;
     }
 
@@ -24,6 +29,10 @@ public sealed partial class UserService : IUserService
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateUserName(request.UserName);
+        var assignedRoles = AccessManagementValidation.ValidateNames(request.AssignedRoles, "assignedRoles");
+        await AccessManagementValidation
+            .ValidateActiveRolesAsync(this._roleRepository, assignedRoles, "assignedRoles", cancellationToken)
+            .ConfigureAwait(false);
 
         if (await this._userRepository.ExistsByUserNameAsync(request.UserName!, cancellationToken).ConfigureAwait(false))
         {
@@ -31,6 +40,7 @@ public sealed partial class UserService : IUserService
         }
 
         var user = User.Create(request.UserName!, request.DisplayName, request.ExternalId);
+        user.AssignRoles(assignedRoles);
 
         if (request.Active == false)
         {
@@ -84,6 +94,10 @@ public sealed partial class UserService : IUserService
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateUserName(request.UserName);
+        var assignedRoles = AccessManagementValidation.ValidateNames(request.AssignedRoles, "assignedRoles");
+        await AccessManagementValidation
+            .ValidateActiveRolesAsync(this._roleRepository, assignedRoles, "assignedRoles", cancellationToken)
+            .ConfigureAwait(false);
 
         var user = await this._userRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false)
             ?? throw new NotFoundException("User", id.ToString());
@@ -97,6 +111,7 @@ public sealed partial class UserService : IUserService
         }
 
         user.Update(request.UserName!, request.DisplayName, request.ExternalId, request.Active);
+        user.AssignRoles(assignedRoles);
 
         await this._userRepository.UpdateAsync(user, cancellationToken).ConfigureAwait(false);
 
@@ -116,6 +131,10 @@ public sealed partial class UserService : IUserService
         {
             ApplyPatchOperation(user, op);
         }
+
+        await AccessManagementValidation
+            .ValidateActiveRolesAsync(this._roleRepository, user.GetAssignedRoles(), "assignedRoles", cancellationToken)
+            .ConfigureAwait(false);
 
         await this._userRepository.UpdateAsync(user, cancellationToken).ConfigureAwait(false);
 
@@ -196,9 +215,34 @@ public sealed partial class UserService : IUserService
                 user.Update(newUserName!, user.DisplayName, user.ExternalId, user.Active);
                 break;
 
+            case "ASSIGNEDROLES":
+                user.AssignRoles(AccessManagementValidation.ValidateNames(ReadStringArray(op.Value, "assignedRoles"), "assignedRoles"));
+                break;
+
             default:
                 throw new ValidationException($"Patch path '{op.Path}' is not supported.");
         }
+    }
+
+    private static List<string> ReadStringArray(JsonElement value, string fieldName)
+    {
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            throw new ValidationException($"{fieldName} must be an array of strings.");
+        }
+
+        var values = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                throw new ValidationException($"{fieldName} must be an array of strings.");
+            }
+
+            values.Add(item.GetString()!);
+        }
+
+        return values;
     }
 
     private static UserResponse ToResponse(User user)
@@ -210,6 +254,7 @@ public sealed partial class UserService : IUserService
             UserName = user.UserName,
             DisplayName = user.DisplayName,
             Active = user.Active,
+            AssignedRoles = user.GetAssignedRoles(),
             Meta = new ScimMeta
             {
                 ResourceType = "User",

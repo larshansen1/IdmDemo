@@ -19,6 +19,8 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
     private readonly AuthorizationServerOptions _options;
     private readonly IMachineClientRepository _clientRepository;
     private readonly IMachineClientCertificateRepository _certificateRepository;
+    private readonly IGlobalRoleRepository _roleRepository;
+    private readonly IGlobalScopeRepository _scopeRepository;
     private readonly IJwtSigningKeyStore _signingKeyStore;
     private readonly IDpopProofValidator _dpopProofValidator;
     private readonly ILogger<AuthorizationServerService> _logger;
@@ -27,6 +29,8 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         AuthorizationServerOptions options,
         IMachineClientRepository clientRepository,
         IMachineClientCertificateRepository certificateRepository,
+        IGlobalRoleRepository roleRepository,
+        IGlobalScopeRepository scopeRepository,
         IJwtSigningKeyStore signingKeyStore,
         IDpopProofValidator dpopProofValidator,
         ILogger<AuthorizationServerService> logger)
@@ -35,6 +39,8 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         this._options = options;
         this._clientRepository = clientRepository;
         this._certificateRepository = certificateRepository;
+        this._roleRepository = roleRepository;
+        this._scopeRepository = scopeRepository;
         this._signingKeyStore = signingKeyStore;
         this._dpopProofValidator = dpopProofValidator;
         this._logger = logger;
@@ -82,11 +88,14 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         ValidateGrantType(grantType);
         var client = await this.AuthenticateClientAsync(clientId, clientCertificate, cancellationToken).ConfigureAwait(false);
         var dpopProof = await this.ValidateDpopProofAsync(dpopProofJwt, cancellationToken).ConfigureAwait(false);
-        var grantedScopes = ResolveGrantedScopes(scope, client);
+        var activeAssignedScopes = await this.ResolveActiveAssignedScopesAsync(client, cancellationToken).ConfigureAwait(false);
+        var activeAssignedRoles = await this.ResolveActiveAssignedRolesAsync(client, cancellationToken).ConfigureAwait(false);
+        var grantedScopes = ResolveGrantedScopes(scope, activeAssignedScopes);
         var token = await this.CreateJwtAsync(
             client,
             clientCertificate!,
             grantedScopes,
+            activeAssignedRoles,
             dpopProof?.JwkThumbprint,
             cancellationToken).ConfigureAwait(false);
 
@@ -122,9 +131,10 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         return Base64UrlEncode(SHA256.HashData(certificate.RawData));
     }
 
-    private static IReadOnlyList<string> ResolveGrantedScopes(string? requestedScope, MachineClient client)
+    private static IReadOnlyList<string> ResolveGrantedScopes(
+        string? requestedScope,
+        IReadOnlyList<string> assignedScopes)
     {
-        var assignedScopes = client.GetAssignedScopes();
         if (string.IsNullOrWhiteSpace(requestedScope))
         {
             return assignedScopes;
@@ -210,6 +220,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         MachineClient client,
         X509Certificate2 certificate,
         IReadOnlyList<string> grantedScopes,
+        IReadOnlyList<string> activeAssignedRoles,
         string? dpopJwkThumbprint,
         DateTimeOffset now,
         DateTimeOffset expiresAt)
@@ -235,7 +246,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             ["nbf"] = now.ToUnixTimeSeconds(),
             ["exp"] = expiresAt.ToUnixTimeSeconds(),
             ["scope"] = string.Join(' ', grantedScopes),
-            ["roles"] = client.GetAssignedRoles(),
+            ["roles"] = activeAssignedRoles,
             ["cnf"] = confirmation,
         };
 
@@ -321,6 +332,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         MachineClient client,
         X509Certificate2 certificate,
         IReadOnlyList<string> grantedScopes,
+        IReadOnlyList<string> activeAssignedRoles,
         string? dpopJwkThumbprint,
         CancellationToken cancellationToken)
     {
@@ -333,6 +345,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             client,
             certificate,
             grantedScopes,
+            activeAssignedRoles,
             dpopJwkThumbprint,
             now,
             expiresAt);
@@ -342,5 +355,37 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         var signature = Sign(signingInput, key);
 
         return string.Create(CultureInfo.InvariantCulture, $"{signingInput}.{signature}");
+    }
+
+    private async Task<IReadOnlyList<string>> ResolveActiveAssignedScopesAsync(
+        MachineClient client,
+        CancellationToken cancellationToken)
+    {
+        var activeScopes = new List<string>();
+        foreach (var scopeValue in client.GetAssignedScopes())
+        {
+            if (await this._scopeRepository.ExistsActiveByValueAsync(scopeValue, cancellationToken).ConfigureAwait(false))
+            {
+                activeScopes.Add(scopeValue);
+            }
+        }
+
+        return activeScopes;
+    }
+
+    private async Task<IReadOnlyList<string>> ResolveActiveAssignedRolesAsync(
+        MachineClient client,
+        CancellationToken cancellationToken)
+    {
+        var activeRoles = new List<string>();
+        foreach (var roleValue in client.GetAssignedRoles())
+        {
+            if (await this._roleRepository.ExistsActiveByValueAsync(roleValue, cancellationToken).ConfigureAwait(false))
+            {
+                activeRoles.Add(roleValue);
+            }
+        }
+
+        return activeRoles;
     }
 }

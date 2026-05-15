@@ -16,7 +16,9 @@ Epic 3 (complete) — Machine-client certificate lifecycle APIs, including CSR-b
 
 Epic 4 (complete) — Optional DPoP-bound access token issuance, DPoP proof validation, replay protection, and reusable downstream DPoP access-token validation services.
 
-Planned: global role/scope catalog management and MCP administrative interface.
+Epic 5 (complete) — Global role and scope catalog management, user role assignment, machine-client role/scope assignment validation, and active catalog filtering during token issuance.
+
+Planned: MCP administrative interface.
 
 See [product.md](product.md) for the full roadmap.
 
@@ -47,6 +49,28 @@ GET    /scim/v2/Clients/{id}
 PUT    /scim/v2/Clients/{id}
 PATCH  /scim/v2/Clients/{id}
 DELETE /scim/v2/Clients/{id}
+```
+
+### Global Roles
+
+```
+POST   /scim/v2/Roles
+GET    /scim/v2/Roles?filter=value eq "service-admin"
+GET    /scim/v2/Roles/{id}
+PUT    /scim/v2/Roles/{id}
+PATCH  /scim/v2/Roles/{id}
+DELETE /scim/v2/Roles/{id}
+```
+
+### Global Scopes
+
+```
+POST   /scim/v2/Scopes
+GET    /scim/v2/Scopes?filter=value eq "orders.read"
+GET    /scim/v2/Scopes/{id}
+PUT    /scim/v2/Scopes/{id}
+PATCH  /scim/v2/Scopes/{id}
+DELETE /scim/v2/Scopes/{id}
 ```
 
 ### Client Certificates
@@ -85,6 +109,16 @@ dotnet run --project src/Backend.Api
 
 The API starts on `http://localhost:5000`. The SQLite database (`idm.db`) is created automatically on first run via EF Core migrations.
 
+For the demo scripts, use an explicit URL, API key, issuer, and disposable database path so the scripts and token issuer agree on the local origin:
+
+```bash
+AdminApi__ApiKey=changeme-development-key \
+AuthorizationServer__Issuer=http://localhost:5000 \
+AuthorizationServer__EnableForwardedClientCertificate=true \
+ConnectionStrings__Default="Data Source=idm-demo.db" \
+dotnet run --project src/Backend.Api --urls http://localhost:5000
+```
+
 ### Demo script
 
 ```bash
@@ -92,6 +126,7 @@ bash scripts/demo-api.sh          # run all scenarios, show pass/fail
 bash scripts/demo-api.sh --verbose  # show full request and response for each call
 bash scripts/demo-certificates.sh # run certificate lifecycle scenarios
 bash scripts/demo-auth.sh         # run OAuth mTLS and DPoP token scenarios
+bash scripts/demo-access-management.sh # run role/scope catalog and assignment scenarios
 ```
 
 Environment overrides:
@@ -100,6 +135,7 @@ Environment overrides:
 API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-api.sh
 API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-certificates.sh
 API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-auth.sh
+API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-access-management.sh
 ```
 
 ---
@@ -120,6 +156,7 @@ API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-auth.sh
 │   ├── demo-api.sh             # curl-based API demo with optional verbose mode
 │   ├── demo-certificates.sh    # certificate lifecycle demo
 │   ├── demo-auth.sh            # OAuth mTLS and DPoP token demo
+│   ├── demo-access-management.sh # role/scope catalog and assignment demo
 │   ├── check-complexity.sh
 │   ├── check-duplicates.sh
 │   ├── check-secrets.sh

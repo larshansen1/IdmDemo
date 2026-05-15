@@ -8,6 +8,7 @@ public sealed class User
     private User()
     {
         this.UserName = string.Empty;
+        this.AssignedRoleValues = string.Empty;
     }
 
     public Guid Id { get; private set; }
@@ -19,6 +20,8 @@ public sealed class User
     public string? DisplayName { get; private set; }
 
     public bool Active { get; private set; }
+
+    public string AssignedRoleValues { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
 
@@ -32,6 +35,7 @@ public sealed class User
             UserName = userName,
             DisplayName = displayName,
             ExternalId = externalId,
+            AssignedRoleValues = string.Empty,
             Active = true,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
@@ -45,6 +49,20 @@ public sealed class User
         this.ExternalId = externalId;
         this.Active = active;
         this.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void AssignRoles(IReadOnlyCollection<string> roles)
+    {
+        ArgumentNullException.ThrowIfNull(roles);
+        this.AssignedRoleValues = string.Join(' ', roles);
+        this.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public IReadOnlyList<string> GetAssignedRoles()
+    {
+        return this.AssignedRoleValues.Split(
+            ' ',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     public void Activate()

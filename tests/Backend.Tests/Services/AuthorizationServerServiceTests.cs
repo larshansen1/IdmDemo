@@ -336,6 +336,12 @@ public sealed class AuthorizationServerServiceTests
         IDpopProofValidator? dpopProofValidator = null,
         AuthorizationServerOptions? options = null)
     {
+        var roleRepository = Substitute.For<IGlobalRoleRepository>();
+        roleRepository.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        var scopeRepository = Substitute.For<IGlobalScopeRepository>();
+        scopeRepository.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+
         return new AuthorizationServerService(
             options ?? new AuthorizationServerOptions
             {
@@ -345,6 +351,8 @@ public sealed class AuthorizationServerServiceTests
             },
             repository ?? Substitute.For<IMachineClientRepository>(),
             certificateRepository ?? Substitute.For<IMachineClientCertificateRepository>(),
+            roleRepository,
+            scopeRepository,
             new TestSigningKeyStore(),
             dpopProofValidator ?? Substitute.For<IDpopProofValidator>(),
             Substitute.For<ILogger<AuthorizationServerService>>());

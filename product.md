@@ -366,6 +366,18 @@ sender constraint unless `AuthorizationServer:RequireDpop` is explicitly enabled
 
 Implement global role and scope assignment for users and machine clients.
 
+### Implementation Status
+
+Implemented in the current Epic 5 slice:
+
+- Global role catalog API at `/scim/v2/Roles`
+- Global scope catalog API at `/scim/v2/Scopes`
+- User assigned roles through create, update, response, and PATCH
+- Machine-client assigned roles and scopes validated against active catalog entries
+- Assigned role/scope delete protection with `409 Conflict`
+- Token issuance filters roles and scopes through the active global catalog
+- Integration coverage for role/scope catalog APIs and assignment validation
+
 ### Scope
 
 At this stage, roles and scopes are global. There is no tenant-specific, resource-specific, or domain-specific authorization model.

@@ -9,6 +9,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddSingleton(new AuthorizationServerOptions());
+        services.AddScoped<IGlobalRoleService, GlobalRoleService>();
+        services.AddScoped<IGlobalScopeService, GlobalScopeService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMachineClientService, MachineClientService>();
         services.AddScoped<IMachineClientCertificateService, MachineClientCertificateService>();
@@ -28,6 +30,8 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(authorizationServerOptions);
 
         services.AddSingleton(authorizationServerOptions);
+        services.AddScoped<IGlobalRoleService, GlobalRoleService>();
+        services.AddScoped<IGlobalScopeService, GlobalScopeService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMachineClientService, MachineClientService>();
         services.AddScoped<IMachineClientCertificateService, MachineClientCertificateService>();

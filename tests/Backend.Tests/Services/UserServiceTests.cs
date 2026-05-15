@@ -347,10 +347,17 @@ public sealed class UserServiceTests
         await Assert.ThrowsAsync<NotFoundException>(() => service.DeleteAsync(Guid.NewGuid()));
     }
 
-    private static UserService CreateService(IUserRepository? repo = null, ILogger<UserService>? logger = null)
+    private static UserService CreateService(
+        IUserRepository? repo = null,
+        IGlobalRoleRepository? roleRepository = null,
+        ILogger<UserService>? logger = null)
     {
+        var roles = roleRepository ?? Substitute.For<IGlobalRoleRepository>();
+        roles.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+
         return new UserService(
             repo ?? Substitute.For<IUserRepository>(),
+            roles,
             logger ?? Substitute.For<ILogger<UserService>>());
     }
 

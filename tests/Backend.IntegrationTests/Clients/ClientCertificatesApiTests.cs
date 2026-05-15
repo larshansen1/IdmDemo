@@ -7,6 +7,7 @@ using Backend.Application.Models.Auth;
 using Backend.Application.Models.Certificates;
 using Backend.Application.Models.Clients;
 using Backend.Application.Models.Scim;
+using Backend.Application.Models.Scopes;
 using Backend.IntegrationTests.Infrastructure;
 using Xunit;
 
@@ -199,6 +200,17 @@ public sealed class ClientCertificatesApiTests : IClassFixture<TestWebApplicatio
 
     private async Task<ClientResponse> CreateClientAsync(string clientId, IReadOnlyList<string>? assignedScopes = null)
     {
+        foreach (var assignedScope in assignedScopes ?? [])
+        {
+            var scopeResponse = await this._client.PostAsJsonAsync(
+                new Uri("/scim/v2/Scopes", UriKind.Relative),
+                new CreateScopeRequest { Value = assignedScope });
+            if (scopeResponse.StatusCode != HttpStatusCode.Conflict)
+            {
+                scopeResponse.EnsureSuccessStatusCode();
+            }
+        }
+
         var request = new CreateClientRequest
         {
             ClientId = clientId,

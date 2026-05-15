@@ -9,4 +9,6 @@ public sealed class UpdateUserRequest
     public string? ExternalId { get; init; }
 
     public bool Active { get; init; } = true;
+
+    public IReadOnlyList<string> AssignedRoles { get; init; } = [];
 }

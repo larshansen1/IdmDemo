@@ -12,11 +12,19 @@ namespace Backend.Application.Services;
 public sealed partial class MachineClientService : IMachineClientService
 {
     private readonly IMachineClientRepository _clientRepository;
+    private readonly IGlobalRoleRepository _roleRepository;
+    private readonly IGlobalScopeRepository _scopeRepository;
     private readonly ILogger<MachineClientService> _logger;
 
-    public MachineClientService(IMachineClientRepository clientRepository, ILogger<MachineClientService> logger)
+    public MachineClientService(
+        IMachineClientRepository clientRepository,
+        IGlobalRoleRepository roleRepository,
+        IGlobalScopeRepository scopeRepository,
+        ILogger<MachineClientService> logger)
     {
         this._clientRepository = clientRepository;
+        this._roleRepository = roleRepository;
+        this._scopeRepository = scopeRepository;
         this._logger = logger;
     }
 
@@ -25,8 +33,9 @@ public sealed partial class MachineClientService : IMachineClientService
         ArgumentNullException.ThrowIfNull(request);
         ValidateClientId(request.ClientId);
         var certificateThumbprint = NormalizeThumbprint(request.CertificateThumbprintSha256);
-        var assignedScopes = ValidateNames(request.AssignedScopes, "assignedScopes");
-        var assignedRoles = ValidateNames(request.AssignedRoles, "assignedRoles");
+        var assignedScopes = AccessManagementValidation.ValidateNames(request.AssignedScopes, "assignedScopes");
+        var assignedRoles = AccessManagementValidation.ValidateNames(request.AssignedRoles, "assignedRoles");
+        await this.ValidateAssignmentsAsync(assignedScopes, assignedRoles, cancellationToken).ConfigureAwait(false);
 
         if (await this._clientRepository.ExistsByClientIdAsync(request.ClientId!, cancellationToken).ConfigureAwait(false))
         {
@@ -91,8 +100,9 @@ public sealed partial class MachineClientService : IMachineClientService
         ArgumentNullException.ThrowIfNull(request);
         ValidateClientId(request.ClientId);
         var certificateThumbprint = NormalizeThumbprint(request.CertificateThumbprintSha256);
-        var assignedScopes = ValidateNames(request.AssignedScopes, "assignedScopes");
-        var assignedRoles = ValidateNames(request.AssignedRoles, "assignedRoles");
+        var assignedScopes = AccessManagementValidation.ValidateNames(request.AssignedScopes, "assignedScopes");
+        var assignedRoles = AccessManagementValidation.ValidateNames(request.AssignedRoles, "assignedRoles");
+        await this.ValidateAssignmentsAsync(assignedScopes, assignedRoles, cancellationToken).ConfigureAwait(false);
 
         var client = await this._clientRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false)
             ?? throw new NotFoundException("Client", id.ToString());
@@ -128,6 +138,11 @@ public sealed partial class MachineClientService : IMachineClientService
         {
             ApplyPatchOperation(client, op);
         }
+
+        await this.ValidateAssignmentsAsync(
+            client.GetAssignedScopes(),
+            client.GetAssignedRoles(),
+            cancellationToken).ConfigureAwait(false);
 
         await this._clientRepository.UpdateAsync(client, cancellationToken).ConfigureAwait(false);
 
@@ -262,34 +277,6 @@ public sealed partial class MachineClientService : IMachineClientService
         return normalized;
     }
 
-    private static List<string> ValidateNames(IReadOnlyList<string> values, string fieldName)
-    {
-        ArgumentNullException.ThrowIfNull(values);
-
-        var normalized = new List<string>();
-        foreach (var value in values)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                throw new ValidationException($"{fieldName} must not contain empty values.");
-            }
-
-            if (value.Length > 128)
-            {
-                throw new ValidationException($"{fieldName} values must not exceed 128 characters.");
-            }
-
-            if (value.Any(char.IsWhiteSpace))
-            {
-                throw new ValidationException($"{fieldName} values must not contain whitespace.");
-            }
-
-            normalized.Add(value);
-        }
-
-        return normalized.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
-    }
-
     private static List<string> ReadStringArray(JsonElement value, string fieldName)
     {
         if (value.ValueKind != JsonValueKind.Array)
@@ -323,12 +310,12 @@ public sealed partial class MachineClientService : IMachineClientService
 
     private static void ReplaceAssignedRoles(MachineClient client, JsonElement value)
     {
-        client.AssignRoles(ValidateNames(ReadStringArray(value, "assignedRoles"), "assignedRoles"));
+        client.AssignRoles(AccessManagementValidation.ValidateNames(ReadStringArray(value, "assignedRoles"), "assignedRoles"));
     }
 
     private static void ReplaceAssignedScopes(MachineClient client, JsonElement value)
     {
-        client.AssignScopes(ValidateNames(ReadStringArray(value, "assignedScopes"), "assignedScopes"));
+        client.AssignScopes(AccessManagementValidation.ValidateNames(ReadStringArray(value, "assignedScopes"), "assignedScopes"));
     }
 
     private static void ReplaceCertificateExpiry(MachineClient client, JsonElement value)
@@ -362,5 +349,18 @@ public sealed partial class MachineClientService : IMachineClientService
             ? null
             : value.GetString();
         client.Update(client.ClientId, displayName, client.Active);
+    }
+
+    private async Task ValidateAssignmentsAsync(
+        IReadOnlyList<string> assignedScopes,
+        IReadOnlyList<string> assignedRoles,
+        CancellationToken cancellationToken)
+    {
+        await AccessManagementValidation
+            .ValidateActiveScopesAsync(this._scopeRepository, assignedScopes, "assignedScopes", cancellationToken)
+            .ConfigureAwait(false);
+        await AccessManagementValidation
+            .ValidateActiveRolesAsync(this._roleRepository, assignedRoles, "assignedRoles", cancellationToken)
+            .ConfigureAwait(false);
     }
 }
