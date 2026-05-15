@@ -35,10 +35,13 @@ builder.Services.AddSwaggerGen(options =>
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? "Data Source=idm.db";
 
-var authorizationServerOptions = builder.Configuration
+var authorizationServerOptions = new AuthorizationServerOptions
+{
+    DpopSupportedAlgorithms = [],
+};
+builder.Configuration
     .GetSection("AuthorizationServer")
-    .Get<AuthorizationServerOptions>()
-    ?? new AuthorizationServerOptions();
+    .Bind(authorizationServerOptions);
 var signingKeyPath = builder.Configuration["AuthorizationServer:SigningKeyPath"]
     ?? Path.Combine(builder.Environment.ContentRootPath, "signing-key.json");
 var certificateAuthorityPath = builder.Configuration["CertificateAuthority:KeyPath"]

@@ -6,7 +6,9 @@ using System.Text;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
 using Backend.Application.Models.Clients;
+using Backend.Application.Services;
 using Backend.IntegrationTests.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Backend.IntegrationTests.Auth;
@@ -42,6 +44,7 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
         Assert.Contains("client_credentials", metadata.GrantTypesSupported);
         Assert.Contains("self_signed_tls_client_auth", metadata.TokenEndpointAuthMethodsSupported);
         Assert.True(metadata.TlsClientCertificateBoundAccessTokens);
+        Assert.Equal(["ES256", "RS256"], metadata.DpopSigningAlgValuesSupported);
     }
 
     [Fact]
@@ -93,6 +96,104 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
         Assert.Equal(
             ComputeThumbprintBase64Url(certificate),
             payload.GetProperty("cnf").GetProperty("x5t#S256").GetString());
+    }
+
+    [Fact]
+    public async Task PostToken_ValidDpopProof_ReturnsDpopBoundJwt()
+    {
+        var clientId = $"dpop-{Guid.NewGuid():N}";
+        using var certificate = CreateCertificate(clientId);
+        using var dpopKey = RSA.Create(2048);
+        var client = await this.CreateClientAsync(
+            clientId,
+            ComputeThumbprintHex(certificate),
+            ["orders.read"],
+            []);
+        using var request = CreateTokenRequest(client.ClientId, "orders.read");
+        request.Headers.Add("X-Client-Cert", Convert.ToBase64String(certificate.RawData));
+        request.Headers.Add("DPoP", CreateDpopProof(dpopKey));
+
+        var response = await this._client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(_jsonOptions);
+        Assert.NotNull(tokenResponse);
+        Assert.Equal("DPoP", tokenResponse.TokenType);
+
+        var payload = ReadJwtPayload(tokenResponse.AccessToken);
+        var confirmation = payload.GetProperty("cnf");
+        Assert.Equal(ComputeJwkThumbprint(dpopKey), confirmation.GetProperty("jkt").GetString());
+        Assert.False(confirmation.TryGetProperty("x5t#S256", out _));
+    }
+
+    [Fact]
+    public async Task DpopBoundToken_WithProtectedResourceProof_ValidatesAccessToken()
+    {
+        var clientId = $"dpop-resource-{Guid.NewGuid():N}";
+        using var certificate = CreateCertificate(clientId);
+        using var dpopKey = RSA.Create(2048);
+        var client = await this.CreateClientAsync(
+            clientId,
+            ComputeThumbprintHex(certificate),
+            ["orders.read"],
+            []);
+        using var request = CreateTokenRequest(client.ClientId, "orders.read");
+        request.Headers.Add("X-Client-Cert", Convert.ToBase64String(certificate.RawData));
+        request.Headers.Add("DPoP", CreateDpopProof(dpopKey));
+        var tokenResponseMessage = await this._client.SendAsync(request);
+        tokenResponseMessage.EnsureSuccessStatusCode();
+        var tokenResponse = await tokenResponseMessage.Content.ReadFromJsonAsync<TokenResponse>(_jsonOptions);
+        Assert.NotNull(tokenResponse);
+        var resourceUri = new Uri("https://idmdemo.test/scim/v2/Users");
+        var protectedResourceProof = CreateDpopProof(dpopKey, "GET", resourceUri, tokenResponse.AccessToken);
+
+        using var scope = this._factory.Services.CreateScope();
+        var validator = scope.ServiceProvider.GetRequiredService<IDpopBoundAccessTokenValidator>();
+        var validatedToken = await validator.ValidateAsync(
+            tokenResponse.AccessToken,
+            protectedResourceProof,
+            "GET",
+            resourceUri);
+
+        Assert.Equal(client.Id, validatedToken.Subject);
+        Assert.Equal(clientId, validatedToken.ClientId);
+        Assert.Equal("orders.read", validatedToken.Scope);
+        Assert.Equal(ComputeJwkThumbprint(dpopKey), validatedToken.DpopJwkThumbprint);
+        Assert.Null(validatedToken.CertificateThumbprintSha256);
+    }
+
+    [Fact]
+    public async Task DpopBoundToken_WithMismatchedProtectedResourceProof_ReturnsInvalidToken()
+    {
+        var clientId = $"dpop-resource-{Guid.NewGuid():N}";
+        using var certificate = CreateCertificate(clientId);
+        using var tokenKey = RSA.Create(2048);
+        using var resourceKey = RSA.Create(2048);
+        var client = await this.CreateClientAsync(
+            clientId,
+            ComputeThumbprintHex(certificate),
+            ["orders.read"],
+            []);
+        using var request = CreateTokenRequest(client.ClientId, "orders.read");
+        request.Headers.Add("X-Client-Cert", Convert.ToBase64String(certificate.RawData));
+        request.Headers.Add("DPoP", CreateDpopProof(tokenKey));
+        var tokenResponseMessage = await this._client.SendAsync(request);
+        tokenResponseMessage.EnsureSuccessStatusCode();
+        var tokenResponse = await tokenResponseMessage.Content.ReadFromJsonAsync<TokenResponse>(_jsonOptions);
+        Assert.NotNull(tokenResponse);
+        var resourceUri = new Uri("https://idmdemo.test/scim/v2/Users");
+        var protectedResourceProof = CreateDpopProof(resourceKey, "GET", resourceUri, tokenResponse.AccessToken);
+
+        using var scope = this._factory.Services.CreateScope();
+        var validator = scope.ServiceProvider.GetRequiredService<IDpopBoundAccessTokenValidator>();
+        var exception = await Assert.ThrowsAsync<OAuthException>(() => validator.ValidateAsync(
+            tokenResponse.AccessToken,
+            protectedResourceProof,
+            "GET",
+            resourceUri));
+
+        Assert.Equal("invalid_token", exception.Error);
+        Assert.Equal(HttpStatusCode.Unauthorized, (HttpStatusCode)exception.StatusCode);
     }
 
     [Fact]
@@ -154,6 +255,43 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
         await AssertOAuthErrorAsync(response, HttpStatusCode.BadRequest, "unsupported_grant_type");
     }
 
+    [Fact]
+    public async Task PostToken_RequireDpopWithoutProof_ReturnsInvalidDpopProof()
+    {
+        await using var factory = TestWebApplicationFactory.CreateRequireDpop();
+        using var client = factory.CreateClient();
+        var clientId = $"required-dpop-{Guid.NewGuid():N}";
+        using var certificate = CreateCertificate(clientId);
+        await CreateClientAsync(factory, clientId, ComputeThumbprintHex(certificate), ["orders.read"], []);
+        using var request = CreateTokenRequest(clientId, "orders.read");
+        request.Headers.Add("X-Client-Cert", Convert.ToBase64String(certificate.RawData));
+
+        var response = await client.SendAsync(request);
+
+        await AssertOAuthErrorAsync(response, HttpStatusCode.BadRequest, "invalid_dpop_proof");
+    }
+
+    [Fact]
+    public async Task PostToken_RequireDpopWithValidProof_ReturnsDpopToken()
+    {
+        await using var factory = TestWebApplicationFactory.CreateRequireDpop();
+        using var client = factory.CreateClient();
+        var clientId = $"required-dpop-{Guid.NewGuid():N}";
+        using var certificate = CreateCertificate(clientId);
+        using var dpopKey = RSA.Create(2048);
+        await CreateClientAsync(factory, clientId, ComputeThumbprintHex(certificate), ["orders.read"], []);
+        using var request = CreateTokenRequest(clientId, "orders.read");
+        request.Headers.Add("X-Client-Cert", Convert.ToBase64String(certificate.RawData));
+        request.Headers.Add("DPoP", CreateDpopProof(dpopKey));
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(_jsonOptions);
+        Assert.NotNull(tokenResponse);
+        Assert.Equal("DPoP", tokenResponse.TokenType);
+    }
+
     private static HttpRequestMessage CreateTokenRequest(string clientId, string scope)
     {
         return new HttpRequestMessage(HttpMethod.Post, new Uri("/connect/token", UriKind.Relative))
@@ -179,6 +317,49 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
         return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
     }
 
+    private static string CreateDpopProof(
+        RSA rsa,
+        string httpMethod = "POST",
+        Uri? httpUri = null,
+        string? accessToken = null)
+    {
+        var parameters = rsa.ExportParameters(false);
+        var jwk = new Dictionary<string, object?>
+        {
+            ["kty"] = "RSA",
+            ["n"] = Base64UrlEncode(parameters.Modulus ?? []),
+            ["e"] = Base64UrlEncode(parameters.Exponent ?? []),
+        };
+        var header = new Dictionary<string, object?>
+        {
+            ["typ"] = "dpop+jwt",
+            ["alg"] = "RS256",
+            ["jwk"] = jwk,
+        };
+        httpUri ??= new Uri("https://idmdemo.test/connect/token");
+        var payload = new Dictionary<string, object?>
+        {
+            ["htm"] = httpMethod,
+            ["htu"] = httpUri.ToString(),
+            ["jti"] = Guid.NewGuid().ToString(),
+            ["iat"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        };
+        if (!string.IsNullOrEmpty(accessToken))
+        {
+            payload["ath"] = ComputeAccessTokenHash(accessToken);
+        }
+
+        var signingInput = string.Create(
+            null,
+            $"{Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(header))}.{Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payload))}");
+        var signature = rsa.SignData(
+            Encoding.ASCII.GetBytes(signingInput),
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+
+        return string.Create(null, $"{signingInput}.{Base64UrlEncode(signature)}");
+    }
+
     private static string ComputeThumbprintHex(X509Certificate2 certificate)
     {
         return Convert.ToHexString(SHA256.HashData(certificate.RawData));
@@ -187,6 +368,21 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
     private static string ComputeThumbprintBase64Url(X509Certificate2 certificate)
     {
         return Base64UrlEncode(SHA256.HashData(certificate.RawData));
+    }
+
+    private static string ComputeJwkThumbprint(RSA rsa)
+    {
+        var parameters = rsa.ExportParameters(false);
+        var canonicalJson = string.Create(
+            null,
+            $"{{\"e\":\"{Base64UrlEncode(parameters.Exponent ?? [])}\",\"kty\":\"RSA\",\"n\":\"{Base64UrlEncode(parameters.Modulus ?? [])}\"}}");
+
+        return Base64UrlEncode(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalJson)));
+    }
+
+    private static string ComputeAccessTokenHash(string accessToken)
+    {
+        return Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(accessToken)));
     }
 
     private static string Base64UrlEncode(byte[] bytes)
@@ -226,7 +422,8 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
         Assert.Equal(error, oauthError.Error);
     }
 
-    private async Task<ClientResponse> CreateClientAsync(
+    private static async Task<ClientResponse> CreateClientAsync(
+        TestWebApplicationFactory factory,
         string clientId,
         string certificateThumbprint,
         IReadOnlyList<string> scopes,
@@ -239,11 +436,20 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
             AssignedScopes = scopes,
             AssignedRoles = roles,
         };
-        using var adminClient = this._factory.CreateClient();
+        using var adminClient = factory.CreateClient();
         adminClient.DefaultRequestHeaders.Add("X-Api-Key", TestWebApplicationFactory.TestApiKey);
         var response = await adminClient.PostAsJsonAsync(new Uri("/scim/v2/Clients", UriKind.Relative), request);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<ClientResponse>(content, _jsonOptions)!;
+    }
+
+    private async Task<ClientResponse> CreateClientAsync(
+        string clientId,
+        string certificateThumbprint,
+        IReadOnlyList<string> scopes,
+        IReadOnlyList<string> roles)
+    {
+        return await CreateClientAsync(this._factory, clientId, certificateThumbprint, scopes, roles);
     }
 }

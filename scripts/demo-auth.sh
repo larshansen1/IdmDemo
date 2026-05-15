@@ -126,6 +126,101 @@ else:
 PY
 }
 
+base64url_stdin() {
+    python3 -c 'import base64,sys; print(base64.urlsafe_b64encode(sys.stdin.buffer.read()).decode().rstrip("="))'
+}
+
+base64url_hex() {
+    python3 - "$1" <<'PY'
+import base64
+import sys
+
+print(base64.urlsafe_b64encode(bytes.fromhex(sys.argv[1])).decode().rstrip("="))
+PY
+}
+
+create_dpop_proof() {
+    local method="$1" uri="$2" key_path="$3"
+    local modulus_hex exponent_dec jwk_n jwk_e header payload signing_input signature
+
+    modulus_hex=$(openssl rsa -in "$key_path" -noout -modulus 2>/dev/null | cut -d= -f2)
+    exponent_dec=$(openssl rsa -in "$key_path" -text -noout 2>/dev/null \
+        | awk '/publicExponent/ { print $2; exit }')
+    jwk_n=$(base64url_hex "$modulus_hex")
+    jwk_e=$(python3 - "$exponent_dec" <<'PY'
+import base64
+import sys
+
+value = int(sys.argv[1])
+length = max(1, (value.bit_length() + 7) // 8)
+print(base64.urlsafe_b64encode(value.to_bytes(length, "big")).decode().rstrip("="))
+PY
+)
+
+    header=$(python3 - "$jwk_n" "$jwk_e" <<'PY'
+import base64
+import json
+import sys
+
+header = {
+    "typ": "dpop+jwt",
+    "alg": "RS256",
+    "jwk": {
+        "kty": "RSA",
+        "n": sys.argv[1],
+        "e": sys.argv[2],
+    },
+}
+print(base64.urlsafe_b64encode(json.dumps(header, separators=(",", ":")).encode()).decode().rstrip("="))
+PY
+)
+    payload=$(python3 - "$method" "$uri" <<'PY'
+import base64
+import json
+import sys
+import time
+import uuid
+
+payload = {
+    "htm": sys.argv[1],
+    "htu": sys.argv[2],
+    "jti": str(uuid.uuid4()),
+    "iat": int(time.time()),
+}
+print(base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("="))
+PY
+)
+    signing_input="$header.$payload"
+    printf '%s' "$signing_input" > "$WORKDIR/dpop-signing-input.txt"
+    signature=$(openssl dgst -sha256 -sign "$key_path" -binary "$WORKDIR/dpop-signing-input.txt" | base64url_stdin)
+    printf '%s.%s' "$signing_input" "$signature"
+}
+
+jwk_thumbprint() {
+    local key_path="$1" modulus_hex exponent_dec jwk_n jwk_e
+    modulus_hex=$(openssl rsa -in "$key_path" -noout -modulus 2>/dev/null | cut -d= -f2)
+    exponent_dec=$(openssl rsa -in "$key_path" -text -noout 2>/dev/null \
+        | awk '/publicExponent/ { print $2; exit }')
+    jwk_n=$(base64url_hex "$modulus_hex")
+    jwk_e=$(python3 - "$exponent_dec" <<'PY'
+import base64
+import sys
+
+value = int(sys.argv[1])
+length = max(1, (value.bit_length() + 7) // 8)
+print(base64.urlsafe_b64encode(value.to_bytes(length, "big")).decode().rstrip("="))
+PY
+)
+    python3 - "$jwk_n" "$jwk_e" <<'PY'
+import base64
+import hashlib
+import sys
+
+canonical = f'{{"e":"{sys.argv[2]}","kty":"RSA","n":"{sys.argv[1]}"}}'
+print(base64.urlsafe_b64encode(hashlib.sha256(canonical.encode()).digest()).decode().rstrip("="))
+PY
+}
+
 header() {
     echo ""
     echo "──────────────────────────────────────────"
@@ -175,8 +270,10 @@ check "GET /.well-known/openid-configuration → 200" 200 "$_STATUS" "$_BODY"
 TOKEN_ENDPOINT=$(echo "$_BODY" | json_field token_endpoint)
 AUTH_METHODS=$(python3 -c 'import sys,json; d=json.load(sys.stdin); print(" ".join(d.get("token_endpoint_auth_methods_supported", [])))' <<<"$_BODY")
 MTLS_BOUND=$(python3 -c 'import sys,json; d=json.load(sys.stdin); print(str(d.get("tls_client_certificate_bound_access_tokens", False)).lower())' <<<"$_BODY")
+DPOP_ALGS=$(python3 -c 'import sys,json; d=json.load(sys.stdin); print(" ".join(d.get("dpop_signing_alg_values_supported", [])))' <<<"$_BODY")
 check_value "Discovery advertises self_signed_tls_client_auth" "self_signed_tls_client_auth" "$AUTH_METHODS"
 check_value "Discovery advertises certificate-bound access tokens" "true" "$MTLS_BOUND"
+check_value "Discovery advertises DPoP signing algorithms" "ES256 RS256" "$DPOP_ALGS"
 
 do_request GET /.well-known/jwks.json
 check "GET /.well-known/jwks.json → 200" 200 "$_STATUS" "$_BODY"
@@ -223,6 +320,37 @@ if [ "$VERBOSE" -eq 0 ]; then
     echo "  JWT issuer       : $JWT_ISSUER"
     echo "  Token endpoint   : $TOKEN_ENDPOINT"
     echo "  Access token head: ${ACCESS_TOKEN:0:80}..."
+    echo ""
+fi
+
+header "Issue DPoP-bound JWT"
+
+openssl genpkey \
+    -algorithm RSA \
+    -pkeyopt rsa_keygen_bits:2048 \
+    -out "$WORKDIR/dpop.key" >/dev/null 2>&1
+
+DPOP_PROOF=$(create_dpop_proof POST "$TOKEN_ENDPOINT" "$WORKDIR/dpop.key")
+DPOP_JKT=$(jwk_thumbprint "$WORKDIR/dpop.key")
+
+do_request POST /connect/token \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -H "X-Client-Cert: $CERT_DER_BASE64" \
+    -H "DPoP: $DPOP_PROOF" \
+    --data-urlencode "grant_type=client_credentials" \
+    --data-urlencode "client_id=$CLIENT_ID" \
+    --data-urlencode "scope=orders.read"
+check "POST /connect/token with mTLS and DPoP proof → 200" 200 "$_STATUS" "$_BODY"
+
+DPOP_ACCESS_TOKEN=$(echo "$_BODY" | json_field access_token)
+DPOP_TOKEN_TYPE=$(echo "$_BODY" | json_field token_type)
+DPOP_JWT_CNF=$(jwt_payload_field "$DPOP_ACCESS_TOKEN" 'cnf.jkt')
+check_value "DPoP token response type is DPoP" "DPoP" "$DPOP_TOKEN_TYPE"
+check_value "JWT cnf.jkt matches DPoP public key thumbprint" "$DPOP_JKT" "$DPOP_JWT_CNF"
+
+if [ "$VERBOSE" -eq 0 ]; then
+    echo "  DPoP JWK thumb : $DPOP_JKT"
+    echo "  DPoP token head: ${DPOP_ACCESS_TOKEN:0:80}..."
     echo ""
 fi
 

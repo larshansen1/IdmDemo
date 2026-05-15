@@ -21,4 +21,7 @@ public sealed class DiscoveryResponse
 
     [JsonPropertyName("tls_client_certificate_bound_access_tokens")]
     public bool TlsClientCertificateBoundAccessTokens { get; init; }
+
+    [JsonPropertyName("dpop_signing_alg_values_supported")]
+    public IReadOnlyList<string> DpopSigningAlgValuesSupported { get; init; } = [];
 }

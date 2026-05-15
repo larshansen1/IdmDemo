@@ -14,12 +14,24 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _dbPath;
     private readonly string _signingKeyPath;
     private readonly string _certificateAuthorityPath;
+    private readonly bool _requireDpop;
 
     public TestWebApplicationFactory()
+        : this(requireDpop: false)
+    {
+    }
+
+    private TestWebApplicationFactory(bool requireDpop)
     {
         this._dbPath = Path.Combine(Path.GetTempPath(), $"idm_test_{Guid.NewGuid():N}.db");
         this._signingKeyPath = Path.Combine(Path.GetTempPath(), $"idm_test_signing_{Guid.NewGuid():N}.json");
         this._certificateAuthorityPath = Path.Combine(Path.GetTempPath(), $"idm_test_ca_{Guid.NewGuid():N}.json");
+        this._requireDpop = requireDpop;
+    }
+
+    public static TestWebApplicationFactory CreateRequireDpop()
+    {
+        return new TestWebApplicationFactory(requireDpop: true);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -31,6 +43,7 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("AuthorizationServer:Issuer", "https://idmdemo.test");
         builder.UseSetting("AuthorizationServer:Audience", "idm-demo-api");
         builder.UseSetting("AuthorizationServer:AccessTokenLifetimeSeconds", "3600");
+        builder.UseSetting("AuthorizationServer:RequireDpop", this._requireDpop.ToString());
         builder.UseSetting("AuthorizationServer:SigningKeyPath", this._signingKeyPath);
         builder.UseSetting("AuthorizationServer:EnableForwardedClientCertificate", "true");
         builder.UseSetting("AuthorizationServer:ForwardedClientCertificateHeader", "X-Client-Cert");

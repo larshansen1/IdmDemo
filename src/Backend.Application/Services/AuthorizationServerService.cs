@@ -20,6 +20,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
     private readonly IMachineClientRepository _clientRepository;
     private readonly IMachineClientCertificateRepository _certificateRepository;
     private readonly IJwtSigningKeyStore _signingKeyStore;
+    private readonly IDpopProofValidator _dpopProofValidator;
     private readonly ILogger<AuthorizationServerService> _logger;
 
     public AuthorizationServerService(
@@ -27,6 +28,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         IMachineClientRepository clientRepository,
         IMachineClientCertificateRepository certificateRepository,
         IJwtSigningKeyStore signingKeyStore,
+        IDpopProofValidator dpopProofValidator,
         ILogger<AuthorizationServerService> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -34,6 +36,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         this._clientRepository = clientRepository;
         this._certificateRepository = certificateRepository;
         this._signingKeyStore = signingKeyStore;
+        this._dpopProofValidator = dpopProofValidator;
         this._logger = logger;
     }
 
@@ -47,6 +50,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             GrantTypesSupported = ["client_credentials"],
             TokenEndpointAuthMethodsSupported = ["self_signed_tls_client_auth"],
             TlsClientCertificateBoundAccessTokens = true,
+            DpopSigningAlgValuesSupported = this._options.DpopSupportedAlgorithms,
         };
     }
 
@@ -72,18 +76,26 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         string? clientId,
         string? scope,
         X509Certificate2? clientCertificate,
+        string? dpopProofJwt = null,
         CancellationToken cancellationToken = default)
     {
         ValidateGrantType(grantType);
         var client = await this.AuthenticateClientAsync(clientId, clientCertificate, cancellationToken).ConfigureAwait(false);
+        var dpopProof = await this.ValidateDpopProofAsync(dpopProofJwt, cancellationToken).ConfigureAwait(false);
         var grantedScopes = ResolveGrantedScopes(scope, client);
-        var token = await this.CreateJwtAsync(client, clientCertificate!, grantedScopes, cancellationToken).ConfigureAwait(false);
+        var token = await this.CreateJwtAsync(
+            client,
+            clientCertificate!,
+            grantedScopes,
+            dpopProof?.JwkThumbprint,
+            cancellationToken).ConfigureAwait(false);
 
         LogTokenIssued(this._logger, client.Id, client.ClientId);
 
         return new TokenResponse
         {
             AccessToken = token,
+            TokenType = dpopProof is null ? "Bearer" : "DPoP",
             ExpiresIn = this._options.AccessTokenLifetimeSeconds,
             Scope = string.Join(' ', grantedScopes),
         };
@@ -198,9 +210,20 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         MachineClient client,
         X509Certificate2 certificate,
         IReadOnlyList<string> grantedScopes,
+        string? dpopJwkThumbprint,
         DateTimeOffset now,
         DateTimeOffset expiresAt)
     {
+        var confirmation = string.IsNullOrWhiteSpace(dpopJwkThumbprint)
+            ? new Dictionary<string, object>
+            {
+                ["x5t#S256"] = ComputeCertificateThumbprintBase64Url(certificate),
+            }
+            : new Dictionary<string, object>
+            {
+                ["jkt"] = dpopJwkThumbprint,
+            };
+
         var payload = new Dictionary<string, object>
         {
             ["iss"] = options.Issuer,
@@ -213,10 +236,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             ["exp"] = expiresAt.ToUnixTimeSeconds(),
             ["scope"] = string.Join(' ', grantedScopes),
             ["roles"] = client.GetAssignedRoles(),
-            ["cnf"] = new Dictionary<string, object>
-            {
-                ["x5t#S256"] = ComputeCertificateThumbprintBase64Url(certificate),
-            },
+            ["cnf"] = confirmation,
         };
 
         return Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payload));
@@ -278,17 +298,44 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         ValidateClientCertificate(client, clientCertificate);
     }
 
+    private async Task<ValidatedDpopProof?> ValidateDpopProofAsync(
+        string? dpopProofJwt,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(dpopProofJwt))
+        {
+            if (this._options.RequireDpop)
+            {
+                throw new OAuthException("invalid_dpop_proof", "DPoP proof is missing or invalid.", _badRequestStatusCode);
+            }
+
+            return null;
+        }
+
+        return await this._dpopProofValidator
+            .ValidateTokenEndpointProofAsync(dpopProofJwt, new Uri($"{this._options.Issuer}/connect/token"), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private async Task<string> CreateJwtAsync(
         MachineClient client,
         X509Certificate2 certificate,
         IReadOnlyList<string> grantedScopes,
+        string? dpopJwkThumbprint,
         CancellationToken cancellationToken)
     {
         var key = await this._signingKeyStore.GetActiveKeyAsync(cancellationToken).ConfigureAwait(false);
         var now = DateTimeOffset.UtcNow;
         var expiresAt = now.AddSeconds(this._options.AccessTokenLifetimeSeconds);
         var encodedHeader = CreateEncodedHeader(key);
-        var encodedPayload = CreateEncodedPayload(this._options, client, certificate, grantedScopes, now, expiresAt);
+        var encodedPayload = CreateEncodedPayload(
+            this._options,
+            client,
+            certificate,
+            grantedScopes,
+            dpopJwkThumbprint,
+            now,
+            expiresAt);
         var signingInput = string.Create(
             CultureInfo.InvariantCulture,
             $"{encodedHeader}.{encodedPayload}");

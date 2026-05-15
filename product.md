@@ -352,6 +352,14 @@ The system should:
 
 This epic depends on the basic authorization server and mTLS client authentication being implemented first.
 
+### Design Note
+
+The initial DPoP design is documented in `docs/epic-4-dpop-support.md`.
+
+The first implementation should keep mTLS client authentication as the required
+machine-client authentication mechanism and add DPoP as an optional access-token
+sender constraint unless `AuthorizationServer:RequireDpop` is explicitly enabled.
+
 ---
 
 ## Epic 5: Access Management

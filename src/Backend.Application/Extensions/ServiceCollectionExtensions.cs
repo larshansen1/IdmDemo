@@ -12,6 +12,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMachineClientService, MachineClientService>();
         services.AddScoped<IMachineClientCertificateService, MachineClientCertificateService>();
+        services.AddSingleton<IDpopReplayCache, InMemoryDpopReplayCache>();
+        services.AddScoped<IDpopProofValidator, DpopProofValidator>();
+        services.AddScoped<IAccessTokenValidator, AccessTokenValidator>();
+        services.AddScoped<IDpopBoundAccessTokenValidator, DpopBoundAccessTokenValidator>();
         services.AddScoped<IAuthorizationServerService, AuthorizationServerService>();
 
         return services;
@@ -27,6 +31,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMachineClientService, MachineClientService>();
         services.AddScoped<IMachineClientCertificateService, MachineClientCertificateService>();
+        services.AddSingleton<IDpopReplayCache, InMemoryDpopReplayCache>();
+        services.AddScoped<IDpopProofValidator, DpopProofValidator>();
+        services.AddScoped<IAccessTokenValidator, AccessTokenValidator>();
+        services.AddScoped<IDpopBoundAccessTokenValidator, DpopBoundAccessTokenValidator>();
         services.AddScoped<IAuthorizationServerService, AuthorizationServerService>();
 
         return services;

@@ -12,6 +12,8 @@ namespace Backend.Api.Controllers;
 [Produces("application/json")]
 public sealed class TokenController : ControllerBase
 {
+    private const string _dpopHeader = "DPoP";
+
     private readonly IAuthorizationServerService _authorizationServerService;
     private readonly IClientCertificateReader _clientCertificateReader;
 
@@ -36,11 +38,13 @@ public sealed class TokenController : ControllerBase
         try
         {
             var certificate = this._clientCertificateReader.Read(this.HttpContext);
+            this.Request.Headers.TryGetValue(_dpopHeader, out var dpopProof);
             var response = await this._authorizationServerService.IssueClientCredentialsTokenAsync(
                 request.GrantType,
                 request.ClientId,
                 request.Scope,
                 certificate,
+                dpopProof.ToString(),
                 cancellationToken).ConfigureAwait(false);
 
             return this.Ok(response);

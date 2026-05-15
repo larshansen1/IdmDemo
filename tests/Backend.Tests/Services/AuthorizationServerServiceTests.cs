@@ -29,6 +29,7 @@ public sealed class AuthorizationServerServiceTests
         Assert.Contains("client_credentials", discovery.GrantTypesSupported);
         Assert.Contains("self_signed_tls_client_auth", discovery.TokenEndpointAuthMethodsSupported);
         Assert.True(discovery.TlsClientCertificateBoundAccessTokens);
+        Assert.Equal(["ES256", "RS256"], discovery.DpopSigningAlgValuesSupported);
     }
 
     [Fact]
@@ -77,6 +78,61 @@ public sealed class AuthorizationServerServiceTests
         Assert.Equal("service-admin", payload.GetProperty("roles")[0].GetString());
         Assert.True(payload.TryGetProperty("cnf", out var confirmation));
         Assert.NotEmpty(confirmation.GetProperty("x5t#S256").GetString()!);
+    }
+
+    [Fact]
+    public async Task IssueClientCredentialsTokenAsync_ValidDpopProof_ReturnsDpopBoundJwt()
+    {
+        using var certificate = CreateCertificate();
+        var client = CreateClient(certificate);
+        client.AssignScopes(["orders.read"]);
+        var repository = Substitute.For<IMachineClientRepository>();
+        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        var dpopProofValidator = Substitute.For<IDpopProofValidator>();
+        dpopProofValidator
+            .ValidateTokenEndpointProofAsync(
+                "proof.jwt",
+                new Uri("https://issuer.test/connect/token"),
+                Arg.Any<CancellationToken>())
+            .Returns(new ValidatedDpopProof { JwkThumbprint = "test-jkt" });
+        var service = CreateService(repository, dpopProofValidator: dpopProofValidator);
+
+        var response = await service.IssueClientCredentialsTokenAsync(
+            "client_credentials",
+            client.ClientId,
+            "orders.read",
+            certificate,
+            "proof.jwt");
+
+        Assert.Equal("DPoP", response.TokenType);
+        var payload = ReadJwtPayload(response.AccessToken);
+        var confirmation = payload.GetProperty("cnf");
+        Assert.Equal("test-jkt", confirmation.GetProperty("jkt").GetString());
+        Assert.False(confirmation.TryGetProperty("x5t#S256", out _));
+    }
+
+    [Fact]
+    public async Task IssueClientCredentialsTokenAsync_RequireDpopWithoutProof_ThrowsInvalidDpopProof()
+    {
+        using var certificate = CreateCertificate();
+        var client = CreateClient(certificate);
+        var repository = Substitute.For<IMachineClientRepository>();
+        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        var service = CreateService(
+            repository,
+            options: new AuthorizationServerOptions
+            {
+                Issuer = "https://issuer.test",
+                Audience = "api://default",
+                AccessTokenLifetimeSeconds = 3600,
+                RequireDpop = true,
+            });
+
+        var exception = await Assert.ThrowsAsync<OAuthException>(() =>
+            service.IssueClientCredentialsTokenAsync("client_credentials", client.ClientId, null, certificate));
+
+        Assert.Equal("invalid_dpop_proof", exception.Error);
+        Assert.Equal(400, exception.StatusCode);
     }
 
     [Fact]
@@ -276,10 +332,12 @@ public sealed class AuthorizationServerServiceTests
 
     private static AuthorizationServerService CreateService(
         IMachineClientRepository? repository = null,
-        IMachineClientCertificateRepository? certificateRepository = null)
+        IMachineClientCertificateRepository? certificateRepository = null,
+        IDpopProofValidator? dpopProofValidator = null,
+        AuthorizationServerOptions? options = null)
     {
         return new AuthorizationServerService(
-            new AuthorizationServerOptions
+            options ?? new AuthorizationServerOptions
             {
                 Issuer = "https://issuer.test",
                 Audience = "api://default",
@@ -288,6 +346,7 @@ public sealed class AuthorizationServerServiceTests
             repository ?? Substitute.For<IMachineClientRepository>(),
             certificateRepository ?? Substitute.For<IMachineClientCertificateRepository>(),
             new TestSigningKeyStore(),
+            dpopProofValidator ?? Substitute.For<IDpopProofValidator>(),
             Substitute.For<ILogger<AuthorizationServerService>>());
     }
 

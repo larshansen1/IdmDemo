@@ -10,7 +10,13 @@ Implements clean architecture, explicit security boundaries, structured observab
 
 Epic 1 (complete) — SCIM-inspired administrative APIs for managing users and machine clients, protected by API-key authentication.
 
-Planned: mTLS machine-to-machine authentication, JWT/DPoP token issuance, certificate lifecycle, global roles and scopes, MCP administrative interface.
+Epic 2 (complete) — OAuth-style client credentials token issuance for machine clients authenticated with mTLS, including JWT access tokens, discovery metadata, and JWKS.
+
+Epic 3 (complete) — Machine-client certificate lifecycle APIs, including CSR-based issuance, external certificate registration, listing, lookup, and revocation.
+
+Epic 4 (complete) — Optional DPoP-bound access token issuance, DPoP proof validation, replay protection, and reusable downstream DPoP access-token validation services.
+
+Planned: global role/scope catalog management and MCP administrative interface.
 
 See [product.md](product.md) for the full roadmap.
 
@@ -43,6 +49,30 @@ PATCH  /scim/v2/Clients/{id}
 DELETE /scim/v2/Clients/{id}
 ```
 
+### Client Certificates
+
+```
+GET    /scim/v2/Certificates/Authority
+POST   /scim/v2/Clients/{clientId}/Certificates
+GET    /scim/v2/Clients/{clientId}/Certificates
+GET    /scim/v2/Clients/{clientId}/Certificates/{certificateId}
+POST   /scim/v2/Clients/{clientId}/Certificates/{certificateId}/Revoke
+```
+
+### Authorization Server
+
+Discovery and JWKS are public. Token requests use OAuth-style form encoding and OAuth-style error responses.
+
+```
+GET  /.well-known/openid-configuration
+GET  /.well-known/jwks.json
+POST /connect/token
+```
+
+`/connect/token` supports `grant_type=client_credentials` for registered machine clients. The client certificate is supplied by the TLS layer in production; the local demo and tests use `X-Client-Cert` with a base64 DER certificate to simulate that boundary.
+
+When a token request omits `DPoP`, the server issues a certificate-bound bearer token with `cnf.x5t#S256`. When a request includes a valid `DPoP` proof JWT, the server issues a DPoP-bound token with `token_type=DPoP` and `cnf.jkt`.
+
 Swagger UI is available at `/swagger` when running in Development mode.
 
 ---
@@ -60,12 +90,16 @@ The API starts on `http://localhost:5000`. The SQLite database (`idm.db`) is cre
 ```bash
 bash scripts/demo-api.sh          # run all scenarios, show pass/fail
 bash scripts/demo-api.sh --verbose  # show full request and response for each call
+bash scripts/demo-certificates.sh # run certificate lifecycle scenarios
+bash scripts/demo-auth.sh         # run OAuth mTLS and DPoP token scenarios
 ```
 
 Environment overrides:
 
 ```bash
 API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-api.sh
+API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-certificates.sh
+API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-auth.sh
 ```
 
 ---
@@ -84,6 +118,8 @@ API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-api.sh
 │   └── Backend.IntegrationTests/ # End-to-end tests (WebApplicationFactory + SQLite)
 ├── scripts/
 │   ├── demo-api.sh             # curl-based API demo with optional verbose mode
+│   ├── demo-certificates.sh    # certificate lifecycle demo
+│   ├── demo-auth.sh            # OAuth mTLS and DPoP token demo
 │   ├── check-complexity.sh
 │   ├── check-duplicates.sh
 │   ├── check-secrets.sh
@@ -160,14 +196,26 @@ Hooks run automatically on `git commit`:
 ```json
 {
   "AdminApi": { "ApiKey": "changeme-development-key" },
-  "ConnectionStrings": { "Default": "Data Source=idm.db" }
+  "ConnectionStrings": { "Default": "Data Source=idm.db" },
+  "AuthorizationServer": {
+    "Issuer": "https://idmdemo.test",
+    "Audience": "idm-demo-api",
+    "AccessTokenLifetimeSeconds": 3600,
+    "RequireDpop": false,
+    "DpopProofLifetimeSeconds": 300,
+    "DpopReplayCacheSeconds": 300,
+    "DpopSupportedAlgorithms": [ "ES256", "RS256" ]
+  }
 }
 ```
 
 Override via environment variables for deployment:
 
 ```bash
-AdminApi__ApiKey=secret ConnectionStrings__Default="Data Source=/data/idm.db" dotnet run
+AdminApi__ApiKey=secret \
+ConnectionStrings__Default="Data Source=/data/idm.db" \
+AuthorizationServer__Issuer=https://issuer.example.test \
+dotnet run
 ```
 
 ---
