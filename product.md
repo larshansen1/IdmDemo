@@ -407,30 +407,139 @@ The following are not required initially:
 
 ---
 
-## Epic 6: MCP Access
+## Epic 6: Local Developer MCP Server
 
-Expose selected administrative and operational capabilities through an MCP server so agents can interact with the system.
+Expose selected administrative and operational capabilities through a local MCP server
+that can be used from Codex, Claude CLI, and similar developer-machine agents.
+
+This first MCP epic should be a local developer experience, not a hosted remote
+administration plane. The MCP server should run on the developer machine, communicate
+with the IdM API over HTTP, and authenticate to the existing API using the same
+administrative API-key mechanism as direct API callers.
+
+This keeps the first version small and useful:
+
+- Agents can manage the local IdM demo without learning every HTTP endpoint.
+- MCP does not bypass the API layer, validation, authorization checks, audit logging,
+  or tracing.
+- The implementation can be tested against the existing API behavior instead of
+  introducing a second administrative execution path.
 
 ### Scope
 
-The MCP server should expose controlled tools for managing and inspecting the IdP and Authorization Server.
+The MCP server should expose controlled tools for managing and inspecting the IdP and
+Authorization Server through the existing HTTP API.
 
-Possible MCP tools:
+Initial read-only tools:
+
+- Get user
+- Get machine client
+- List machine clients
+- List certificates
+- Get certificate
+- Get local development CA public certificate
+- Inspect authorization server discovery metadata
+- Inspect JWKS public signing keys
+- Inspect client credential status
+
+Initial mutating tools:
 
 - Create user
-- Get user
 - Update user
 - Delete user
 - Create machine client
-- Get machine client
 - Update machine client
 - Delete machine client
-- Assign role
-- Assign scope
-- List certificates
+- Create global role
+- Update global role
+- Delete global role
+- Create global scope
+- Update global scope
+- Delete global scope
+- Assign user role
+- Assign machine-client role
+- Assign machine-client scope
+- Register external client certificate
+- Issue client certificate from CSR
 - Revoke certificate
-- Inspect authorization server configuration
-- Inspect client credential status
+
+Initial workflow tools:
+
+- Onboard machine client
+
+The onboarding workflow should create or update the machine client, assign requested
+roles and scopes, and optionally register or issue an initial certificate. The tool
+should return the created client record, assigned access metadata, certificate metadata
+when applicable, and the next manual steps the developer must perform, such as storing
+the private key that was generated outside the server.
+
+If onboarding partially succeeds, the tool should not automatically roll back in the
+first version. It should return a structured partial-failure result that clearly states
+which steps succeeded, which step failed, and what cleanup or retry action is available.
+Automatic rollback can be added later after the semantics for deleting clients,
+removing assignments, and revoking certificates are designed explicitly.
+
+The onboard workflow response should include the selected instance, client id, external
+client id, assigned roles, assigned scopes, certificate id, certificate thumbprint,
+certificate expiry when applicable, and next steps. It must not return administrative
+API keys, bearer tokens, private keys, or full CSR contents.
+
+The first version should prefer explicit, resource-shaped tools over a generic
+"call arbitrary endpoint" tool. Generic endpoint callers make it too easy for agent
+prompts to become an undocumented API client and are harder to authorize, audit, and
+test.
+
+Destructive tools should be included in the first version when they require an explicit
+confirmation input, such as `confirm: true`. This applies at minimum to delete and
+certificate revocation tools.
+
+### Local MCP Server Shape
+
+Recommended implementation:
+
+- Add a separate .NET console project, for example `src/Backend.Mcp`.
+- Keep the MCP project outside the HTTP API process for the first version.
+- Configure the target IdM API base URL through configuration or environment variables.
+- Configure the administrative API key through user secrets or environment variables.
+- Use stdio transport as the primary transport for Codex and Claude CLI.
+- Use the official .NET MCP SDK if it fits cleanly with the existing analyzer,
+  packaging, and test constraints.
+- Use typed HTTP clients that call the existing API endpoints.
+- Map MCP tool inputs and outputs to the existing request and response DTO shapes where
+  practical.
+- Preserve SCIM and OAuth error details in MCP tool errors without leaking secrets.
+- Support named API instances so a developer can switch between local environments
+  without changing tool definitions.
+- Select the target API instance using both a process-level default and an optional
+  per-tool `instance` argument.
+
+Recommended initial configuration names:
+
+```json
+{
+  "IdmApiInstances": {
+    "local": {
+      "BaseUrl": "https://localhost:5001",
+      "ApiKey": "<developer-local-admin-api-key>"
+    },
+    "test": {
+      "BaseUrl": "https://localhost:5003",
+      "ApiKey": "<developer-local-test-api-key>"
+    }
+  },
+  "Mcp": {
+    "DefaultInstance": "local",
+    "ReadOnly": false
+  }
+}
+```
+
+The MCP server should not read or write the database directly.
+
+For the first version, certificate key generation should stay outside the MCP server.
+Certificate tools should accept caller-provided CSRs or public certificates and submit
+them to the existing API. Local private-key generation and storage can become a later
+workflow enhancement once the custody and filesystem behavior are designed explicitly.
 
 ### Security Requirements
 
@@ -444,6 +553,68 @@ The MCP server should:
 - Trace all tool executions
 - Clearly distinguish read-only tools from mutating tools
 - Require explicit authorization for destructive operations
+- Avoid logging administrative API keys, bearer tokens, private keys, CSRs, or full
+  certificate PEM bodies
+- Keep tool descriptions explicit about destructive behavior
+- Support a read-only mode that disables mutating tools for safer agent sessions
+
+### Testing Requirements
+
+Epic 6 tests should cover:
+
+- MCP tool registration exposes the expected read-only and mutating tools.
+- Read-only tools call the expected HTTP endpoints with the configured API key.
+- Mutating tools call the expected HTTP endpoints with the configured API key.
+- Tool input validation rejects missing required fields before making HTTP calls.
+- API 400, 401, 404, and 409 responses are surfaced as useful MCP errors.
+- Destructive tools require an explicit confirmation input.
+- Read-only mode disables mutating tools.
+- Named API instances route tool calls to the selected IdM API configuration.
+- The onboard machine client workflow validates inputs, calls the expected API sequence,
+  and reports partial failures clearly.
+- Tool execution logs include correlation IDs and tool names.
+- Sensitive values are not written to logs or tool responses.
+
+### Open Questions
+
+No open product questions remain for the initial Epic 6 scope. Implementation may still
+surface SDK-specific design choices once the .NET MCP package is evaluated against the
+repo's analyzer and packaging constraints.
+
+### Out of Scope
+
+The following should move to later epics:
+
+- Hosted or remote MCP transport.
+- OAuth-protected MCP access.
+- Multi-user MCP authorization policies.
+- Direct database administration tools.
+- Long-running background operations.
+- Agent workflow tools that combine several administrative changes into one high-level
+  operation.
+
+---
+
+## Epic 7: Hosted MCP and Agent Workflows
+
+Extend MCP support beyond the local developer-machine server.
+
+### Scope
+
+This epic should build on Epic 6 only after the local MCP server is useful and stable.
+
+Potential capabilities:
+
+- Hosted MCP transport for remote agent clients.
+- Stronger MCP authentication and authorization than the bootstrap API key.
+- Per-tool authorization policies.
+- Multi-user audit attribution.
+- Higher-level workflow tools for common operations such as onboarding a machine
+  client, rotating certificates, and preparing DPoP-bound client credentials.
+- Safer approval flows for destructive or broad administrative actions.
+
+Hosted MCP should still use the same application service and authorization boundaries
+as the direct API. It must not become a privileged backdoor around the API contract.
 
 ---
 
