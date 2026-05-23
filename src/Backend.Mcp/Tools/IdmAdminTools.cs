@@ -17,6 +17,12 @@ public sealed class IdmAdminTools
 {
     private const string _succeeded = "succeeded";
     private const string _failed = "failed";
+    private static readonly string[] _issuedCertificateNextSteps =
+    [
+        "Return certificatePem to the caller.",
+        "Use certificatePem with the private key that generated the CSR.",
+    ];
+
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly Action<ILogger, string, Exception?> _onboardingFailed =
         LoggerMessage.Define<string>(
@@ -119,18 +125,11 @@ public sealed class IdmAdminTools
         try
         {
             var result = await this._apiClient.ListClientsAsync(instance, filter, cancellationToken).ConfigureAwait(false);
-            return CreateToolResult(result, false);
+            return await this.CreateMachineClientListToolResultAsync(result, instance, cancellationToken).ConfigureAwait(false);
         }
         catch (IdmApiException exception)
         {
-            return CreateToolResult(
-                new
-                {
-                    error = exception.Message,
-                    statusCode = (int)exception.StatusCode,
-                    exception.CorrelationId,
-                },
-                true);
+            return CreateApiErrorToolResult(exception);
         }
         catch (McpConfigurationException exception)
         {
@@ -260,8 +259,8 @@ public sealed class IdmAdminTools
     }
 
     [McpServerTool(Name = "idm_issue_client_certificate_from_csr", ReadOnly = false, Destructive = false)]
-    [Description("Issue a client certificate from a caller-provided CSR.")]
-    public async Task<IdmApiCallResult<CertificateResponse>> IssueClientCertificateFromCsrAsync(
+    [Description("Issue a client certificate from a caller-provided CSR. validityDays is optional and must be between 1 and 90.")]
+    public async Task<CallToolResult> IssueClientCertificateFromCsrAsync(
         string clientId,
         string certificateSigningRequestPem,
         string? displayName = null,
@@ -279,8 +278,20 @@ public sealed class IdmAdminTools
             ValidityDays = validityDays,
         };
 
-        var clientRecordId = await this.ResolveClientRecordIdAsync(instance, clientId, cancellationToken).ConfigureAwait(false);
-        return await this._apiClient.CreateCertificateAsync(instance, clientRecordId, request, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var clientRecordId = await this.ResolveClientRecordIdAsync(instance, clientId, cancellationToken).ConfigureAwait(false);
+            var result = await this._apiClient.CreateCertificateAsync(instance, clientRecordId, request, cancellationToken).ConfigureAwait(false);
+            return CreateIssuedCertificateToolResult(result);
+        }
+        catch (IdmApiException exception)
+        {
+            return CreateApiErrorToolResult(exception);
+        }
+        catch (McpConfigurationException exception)
+        {
+            return CreateToolResult(new { error = exception.Message }, true);
+        }
     }
 
     [McpServerTool(Name = "idm_list_client_certificates", ReadOnly = true)]
@@ -479,6 +490,46 @@ public sealed class IdmAdminTools
         };
     }
 
+    private static CallToolResult CreateApiErrorToolResult(IdmApiException exception)
+    {
+        return CreateToolResult(
+            new
+            {
+                error = exception.Message,
+                statusCode = (int)exception.StatusCode,
+                exception.CorrelationId,
+            },
+            true);
+    }
+
+    private static CallToolResult CreateIssuedCertificateToolResult(IdmApiCallResult<CertificateResponse> result)
+    {
+        var metadata = new
+        {
+            result.Instance,
+            result.CorrelationId,
+            certificatePem = result.Value.CertificatePem,
+            certificate = result.Value,
+            nextSteps = _issuedCertificateNextSteps,
+        };
+
+        return new CallToolResult
+        {
+            IsError = false,
+            Content =
+            [
+                new TextContentBlock
+                {
+                    Text = result.Value.CertificatePem,
+                },
+                new TextContentBlock
+                {
+                    Text = JsonSerializer.Serialize(metadata, _jsonOptions),
+                },
+            ],
+        };
+    }
+
     private static void RequireText(string? value, string parameterName)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -490,6 +541,87 @@ public sealed class IdmAdminTools
     private static string EscapeScimFilterValue(string value)
     {
         return value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+    }
+
+    private async Task<CallToolResult> CreateMachineClientListToolResultAsync(
+        IdmApiCallResult<Backend.Application.Models.Scim.ScimListResponse<ClientResponse>> result,
+        string? instance,
+        CancellationToken cancellationToken)
+    {
+        var clients = new List<object>();
+
+        foreach (var client in result.Value.Resources)
+        {
+            if (!Guid.TryParse(client.Id, out var clientRecordId))
+            {
+                clients.Add(new
+                {
+                    client,
+                    certificateSummary = new
+                    {
+                        certificateCount = 0,
+                        activeCertificateCount = 0,
+                        nextCertificateExpiry = (DateTimeOffset?)null,
+                        warning = $"Machine client '{client.ClientId}' has an invalid record id '{client.Id}'.",
+                    },
+                    activeCertificates = Array.Empty<object>(),
+                });
+                continue;
+            }
+
+            var certificates = await this._apiClient.ListCertificatesAsync(instance, clientRecordId, cancellationToken).ConfigureAwait(false);
+            var activeCertificates = certificates.Value.Resources
+                .Where(certificate => string.Equals(certificate.Status, "Active", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(certificate => certificate.ExpiresAt)
+                .Select(certificate => new
+                {
+                    certificate.Id,
+                    certificate.DisplayName,
+                    certificate.Subject,
+                    certificate.Issuer,
+                    certificate.ThumbprintSha256,
+                    certificate.NotBefore,
+                    certificate.ExpiresAt,
+                    certificate.Status,
+                })
+                .ToArray();
+
+            clients.Add(new
+            {
+                id = client.Id,
+                clientId = client.ClientId,
+                client.DisplayName,
+                client.Active,
+                client.AssignedRoles,
+                client.AssignedScopes,
+                legacySingleCertificate = new
+                {
+                    client.CertificateThumbprintSha256,
+                    client.CertificateSubject,
+                    client.CertificateExpiresAt,
+                    note = "Legacy single-certificate fields do not reflect the certificate collection.",
+                },
+                certificateSummary = new
+                {
+                    certificateCount = certificates.Value.TotalResults,
+                    activeCertificateCount = activeCertificates.Length,
+                    nextCertificateExpiry = activeCertificates.Length > 0 ? activeCertificates[0].ExpiresAt : (DateTimeOffset?)null,
+                },
+                activeCertificates,
+            });
+        }
+
+        return CreateToolResult(
+            new
+            {
+                result.Instance,
+                result.CorrelationId,
+                result.Value.TotalResults,
+                result.Value.StartIndex,
+                itemsPerPage = clients.Count,
+                clients,
+            },
+            false);
     }
 
     private async Task<Guid> ResolveClientRecordIdAsync(

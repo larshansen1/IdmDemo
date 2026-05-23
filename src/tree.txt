@@ -1,0 +1,663 @@
+.
+├── Backend.Api
+│   ├── appsettings.Development.json
+│   ├── appsettings.json
+│   ├── Backend.Api.csproj
+│   ├── bin
+│   │   └── Debug
+│   │       └── net8.0
+│   │           ├── appsettings.Development.json
+│   │           ├── appsettings.json
+│   │           ├── Backend.Api
+│   │           ├── Backend.Api.deps.json
+│   │           ├── Backend.Api.dll
+│   │           ├── Backend.Api.pdb
+│   │           ├── Backend.Api.runtimeconfig.json
+│   │           ├── Backend.Application.dll
+│   │           ├── Backend.Application.pdb
+│   │           ├── Backend.Domain.dll
+│   │           ├── Backend.Domain.pdb
+│   │           ├── Backend.Infrastructure.dll
+│   │           ├── Backend.Infrastructure.pdb
+│   │           ├── certificate-authority.json
+│   │           ├── cs
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── de
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── es
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── fr
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── Humanizer.dll
+│   │           ├── it
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── ja
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── ko
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── Microsoft.Bcl.AsyncInterfaces.dll
+│   │           ├── Microsoft.Bcl.TimeProvider.dll
+│   │           ├── Microsoft.CodeAnalysis.CSharp.dll
+│   │           ├── Microsoft.CodeAnalysis.CSharp.Workspaces.dll
+│   │           ├── Microsoft.CodeAnalysis.dll
+│   │           ├── Microsoft.CodeAnalysis.Workspaces.dll
+│   │           ├── Microsoft.Data.Sqlite.dll
+│   │           ├── Microsoft.EntityFrameworkCore.Abstractions.dll
+│   │           ├── Microsoft.EntityFrameworkCore.Design.dll
+│   │           ├── Microsoft.EntityFrameworkCore.dll
+│   │           ├── Microsoft.EntityFrameworkCore.Relational.dll
+│   │           ├── Microsoft.EntityFrameworkCore.Sqlite.dll
+│   │           ├── Microsoft.Extensions.Caching.Memory.dll
+│   │           ├── Microsoft.Extensions.DependencyInjection.Abstractions.dll
+│   │           ├── Microsoft.Extensions.DependencyInjection.dll
+│   │           ├── Microsoft.Extensions.DependencyModel.dll
+│   │           ├── Microsoft.Extensions.Logging.Abstractions.dll
+│   │           ├── Microsoft.Extensions.Logging.dll
+│   │           ├── Microsoft.Extensions.Options.dll
+│   │           ├── Microsoft.IdentityModel.Abstractions.dll
+│   │           ├── Microsoft.IdentityModel.JsonWebTokens.dll
+│   │           ├── Microsoft.IdentityModel.Logging.dll
+│   │           ├── Microsoft.IdentityModel.Tokens.dll
+│   │           ├── Microsoft.OpenApi.dll
+│   │           ├── Mono.TextTemplating.dll
+│   │           ├── OpenTelemetry.Api.dll
+│   │           ├── OpenTelemetry.Api.ProviderBuilderExtensions.dll
+│   │           ├── OpenTelemetry.dll
+│   │           ├── OpenTelemetry.Exporter.Console.dll
+│   │           ├── OpenTelemetry.Extensions.Hosting.dll
+│   │           ├── OpenTelemetry.Instrumentation.AspNetCore.dll
+│   │           ├── pl
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── pt-BR
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── ru
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── runtimes
+│   │           │   ├── browser-wasm
+│   │           │   │   └── nativeassets
+│   │           │   │       └── net8.0
+│   │           │   │           └── e_sqlite3.a
+│   │           │   ├── linux-arm
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-arm64
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-armel
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-mips64
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-musl-arm
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-musl-arm64
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-musl-x64
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-ppc64le
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-s390x
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-x64
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── linux-x86
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.so
+│   │           │   ├── maccatalyst-arm64
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.dylib
+│   │           │   ├── maccatalyst-x64
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.dylib
+│   │           │   ├── osx-arm64
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.dylib
+│   │           │   ├── osx-x64
+│   │           │   │   └── native
+│   │           │   │       └── libe_sqlite3.dylib
+│   │           │   ├── win-arm
+│   │           │   │   └── native
+│   │           │   │       └── e_sqlite3.dll
+│   │           │   ├── win-arm64
+│   │           │   │   └── native
+│   │           │   │       └── e_sqlite3.dll
+│   │           │   ├── win-x64
+│   │           │   │   └── native
+│   │           │   │       └── e_sqlite3.dll
+│   │           │   └── win-x86
+│   │           │       └── native
+│   │           │           └── e_sqlite3.dll
+│   │           ├── signing-key.json
+│   │           ├── SQLitePCLRaw.batteries_v2.dll
+│   │           ├── SQLitePCLRaw.core.dll
+│   │           ├── SQLitePCLRaw.provider.e_sqlite3.dll
+│   │           ├── Swashbuckle.AspNetCore.Swagger.dll
+│   │           ├── Swashbuckle.AspNetCore.SwaggerGen.dll
+│   │           ├── Swashbuckle.AspNetCore.SwaggerUI.dll
+│   │           ├── System.CodeDom.dll
+│   │           ├── System.Composition.AttributedModel.dll
+│   │           ├── System.Composition.Convention.dll
+│   │           ├── System.Composition.Hosting.dll
+│   │           ├── System.Composition.Runtime.dll
+│   │           ├── System.Composition.TypedParts.dll
+│   │           ├── System.Diagnostics.DiagnosticSource.dll
+│   │           ├── tr
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           ├── zh-Hans
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │           │   ├── Microsoft.CodeAnalysis.resources.dll
+│   │           │   └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   │           └── zh-Hant
+│   │               ├── Microsoft.CodeAnalysis.CSharp.resources.dll
+│   │               ├── Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+│   │               ├── Microsoft.CodeAnalysis.resources.dll
+│   │               └── Microsoft.CodeAnalysis.Workspaces.resources.dll
+│   ├── certificate-authority.json
+│   ├── Controllers
+│   │   ├── AuthorizationServerMetadataController.cs
+│   │   ├── CertificateAuthorityController.cs
+│   │   ├── ClientCertificatesController.cs
+│   │   ├── ScimClientsController.cs
+│   │   ├── ScimRolesController.cs
+│   │   ├── ScimScopesController.cs
+│   │   ├── ScimUsersController.cs
+│   │   └── TokenController.cs
+│   ├── Extensions
+│   │   └── ScimExceptionHandler.cs
+│   ├── idm.db
+│   ├── Middleware
+│   │   ├── ApiKeyMiddleware.cs
+│   │   └── CorrelationIdMiddleware.cs
+│   ├── Models
+│   │   └── TokenFormRequest.cs
+│   ├── obj
+│   │   ├── Backend.Api.csproj.EntityFrameworkCore.targets
+│   │   ├── Backend.Api.csproj.nuget.dgspec.json
+│   │   ├── Backend.Api.csproj.nuget.g.props
+│   │   ├── Backend.Api.csproj.nuget.g.targets
+│   │   ├── Debug
+│   │   │   └── net8.0
+│   │   │       ├── apphost
+│   │   │       ├── Backend.Api.AssemblyInfo.cs
+│   │   │       ├── Backend.Api.AssemblyInfoInputs.cache
+│   │   │       ├── Backend.Api.assets.cache
+│   │   │       ├── Backend.Api.csproj.AssemblyReference.cache
+│   │   │       ├── Backend.Api.csproj.CopyComplete
+│   │   │       ├── Backend.Api.csproj.CoreCompileInputs.cache
+│   │   │       ├── Backend.Api.csproj.FileListAbsolute.txt
+│   │   │       ├── Backend.Api.dll
+│   │   │       ├── Backend.Api.GeneratedMSBuildEditorConfig.editorconfig
+│   │   │       ├── Backend.Api.genruntimeconfig.cache
+│   │   │       ├── Backend.Api.GlobalUsings.g.cs
+│   │   │       ├── Backend.Api.MvcApplicationPartsAssemblyInfo.cache
+│   │   │       ├── Backend.Api.MvcApplicationPartsAssemblyInfo.cs
+│   │   │       ├── Backend.Api.pdb
+│   │   │       ├── Backend.Api.sourcelink.json
+│   │   │       ├── ref
+│   │   │       │   └── Backend.Api.dll
+│   │   │       ├── refint
+│   │   │       │   └── Backend.Api.dll
+│   │   │       ├── staticwebassets
+│   │   │       │   ├── msbuild.build.Backend.Api.props
+│   │   │       │   ├── msbuild.buildMultiTargeting.Backend.Api.props
+│   │   │       │   └── msbuild.buildTransitive.Backend.Api.props
+│   │   │       └── staticwebassets.build.json
+│   │   ├── project.assets.json
+│   │   ├── project.nuget.cache
+│   │   └── Release
+│   │       └── net8.0
+│   │           ├── apphost
+│   │           ├── Backend.Api.AssemblyInfo.cs
+│   │           ├── Backend.Api.AssemblyInfoInputs.cache
+│   │           ├── Backend.Api.assets.cache
+│   │           ├── Backend.Api.csproj.AssemblyReference.cache
+│   │           ├── Backend.Api.csproj.CopyComplete
+│   │           ├── Backend.Api.csproj.CoreCompileInputs.cache
+│   │           ├── Backend.Api.csproj.FileListAbsolute.txt
+│   │           ├── Backend.Api.dll
+│   │           ├── Backend.Api.GeneratedMSBuildEditorConfig.editorconfig
+│   │           ├── Backend.Api.genruntimeconfig.cache
+│   │           ├── Backend.Api.GlobalUsings.g.cs
+│   │           ├── Backend.Api.MvcApplicationPartsAssemblyInfo.cache
+│   │           ├── Backend.Api.MvcApplicationPartsAssemblyInfo.cs
+│   │           ├── Backend.Api.pdb
+│   │           ├── Backend.Api.sourcelink.json
+│   │           ├── ref
+│   │           │   └── Backend.Api.dll
+│   │           ├── refint
+│   │           │   └── Backend.Api.dll
+│   │           ├── staticwebassets
+│   │           │   ├── msbuild.build.Backend.Api.props
+│   │           │   ├── msbuild.buildMultiTargeting.Backend.Api.props
+│   │           │   └── msbuild.buildTransitive.Backend.Api.props
+│   │           └── staticwebassets.build.json
+│   ├── Program.cs
+│   ├── Services
+│   │   ├── ClientCertificateReader.cs
+│   │   └── IClientCertificateReader.cs
+│   └── signing-key.json
+├── Backend.Application
+│   ├── Backend.Application.csproj
+│   ├── bin
+│   │   └── Debug
+│   │       └── net8.0
+│   │           ├── Backend.Application.deps.json
+│   │           ├── Backend.Application.dll
+│   │           ├── Backend.Application.pdb
+│   │           ├── Backend.Domain.dll
+│   │           └── Backend.Domain.pdb
+│   ├── Extensions
+│   │   └── ServiceCollectionExtensions.cs
+│   ├── Models
+│   │   ├── Auth
+│   │   │   ├── AuthorizationServerOptions.cs
+│   │   │   ├── DiscoveryResponse.cs
+│   │   │   ├── JsonWebKeyResponse.cs
+│   │   │   ├── JwksResponse.cs
+│   │   │   ├── OAuthErrorResponse.cs
+│   │   │   ├── TokenResponse.cs
+│   │   │   ├── ValidatedAccessToken.cs
+│   │   │   └── ValidatedDpopProof.cs
+│   │   ├── Certificates
+│   │   │   ├── CertificateAuthorityResponse.cs
+│   │   │   ├── CertificateResponse.cs
+│   │   │   ├── CreateCertificateRequest.cs
+│   │   │   └── RevokeCertificateRequest.cs
+│   │   ├── Clients
+│   │   │   ├── ClientResponse.cs
+│   │   │   ├── CreateClientRequest.cs
+│   │   │   └── UpdateClientRequest.cs
+│   │   ├── Roles
+│   │   │   ├── CreateRoleRequest.cs
+│   │   │   ├── RoleResponse.cs
+│   │   │   └── UpdateRoleRequest.cs
+│   │   ├── Scim
+│   │   │   ├── ScimError.cs
+│   │   │   ├── ScimListResponse.cs
+│   │   │   ├── ScimMeta.cs
+│   │   │   ├── ScimPatchOperation.cs
+│   │   │   └── ScimPatchRequest.cs
+│   │   ├── Scopes
+│   │   │   ├── CreateScopeRequest.cs
+│   │   │   ├── ScopeResponse.cs
+│   │   │   └── UpdateScopeRequest.cs
+│   │   └── Users
+│   │       ├── CreateUserRequest.cs
+│   │       ├── UpdateUserRequest.cs
+│   │       └── UserResponse.cs
+│   ├── obj
+│   │   ├── Backend.Application.csproj.nuget.dgspec.json
+│   │   ├── Backend.Application.csproj.nuget.g.props
+│   │   ├── Backend.Application.csproj.nuget.g.targets
+│   │   ├── Debug
+│   │   │   └── net8.0
+│   │   │       ├── Backend.Application.AssemblyInfo.cs
+│   │   │       ├── Backend.Application.AssemblyInfoInputs.cache
+│   │   │       ├── Backend.Application.assets.cache
+│   │   │       ├── Backend.Application.csproj.AssemblyReference.cache
+│   │   │       ├── Backend.Application.csproj.CopyComplete
+│   │   │       ├── Backend.Application.csproj.CoreCompileInputs.cache
+│   │   │       ├── Backend.Application.csproj.FileListAbsolute.txt
+│   │   │       ├── Backend.Application.dll
+│   │   │       ├── Backend.Application.GeneratedMSBuildEditorConfig.editorconfig
+│   │   │       ├── Backend.Application.GlobalUsings.g.cs
+│   │   │       ├── Backend.Application.pdb
+│   │   │       ├── Backend.Application.sourcelink.json
+│   │   │       ├── ref
+│   │   │       │   └── Backend.Application.dll
+│   │   │       └── refint
+│   │   │           └── Backend.Application.dll
+│   │   ├── project.assets.json
+│   │   ├── project.nuget.cache
+│   │   └── Release
+│   │       └── net8.0
+│   │           ├── Backend.Application.AssemblyInfo.cs
+│   │           ├── Backend.Application.AssemblyInfoInputs.cache
+│   │           ├── Backend.Application.assets.cache
+│   │           ├── Backend.Application.csproj.AssemblyReference.cache
+│   │           ├── Backend.Application.csproj.CoreCompileInputs.cache
+│   │           ├── Backend.Application.csproj.FileListAbsolute.txt
+│   │           ├── Backend.Application.dll
+│   │           ├── Backend.Application.GeneratedMSBuildEditorConfig.editorconfig
+│   │           ├── Backend.Application.GlobalUsings.g.cs
+│   │           ├── Backend.Application.pdb
+│   │           ├── Backend.Application.sourcelink.json
+│   │           ├── ref
+│   │           │   └── Backend.Application.dll
+│   │           └── refint
+│   │               └── Backend.Application.dll
+│   ├── Scim
+│   │   ├── ScimFilter.cs
+│   │   └── ScimFilterParser.cs
+│   └── Services
+│       ├── AccessManagementValidation.cs
+│       ├── AccessTokenValidator.cs
+│       ├── AuthorizationServerService.cs
+│       ├── DpopBoundAccessTokenValidator.cs
+│       ├── DpopProofValidator.cs
+│       ├── GlobalRoleService.cs
+│       ├── GlobalScopeService.cs
+│       ├── IAccessTokenValidator.cs
+│       ├── IAuthorizationServerService.cs
+│       ├── IDpopBoundAccessTokenValidator.cs
+│       ├── IDpopProofValidator.cs
+│       ├── IDpopReplayCache.cs
+│       ├── IGlobalRoleService.cs
+│       ├── IGlobalScopeService.cs
+│       ├── IMachineClientCertificateService.cs
+│       ├── IMachineClientService.cs
+│       ├── InMemoryDpopReplayCache.cs
+│       ├── IUserService.cs
+│       ├── MachineClientCertificateService.cs
+│       ├── MachineClientService.cs
+│       ├── OAuthException.cs
+│       └── UserService.cs
+├── Backend.Domain
+│   ├── Backend.Domain.csproj
+│   ├── bin
+│   │   └── Debug
+│   │       └── net8.0
+│   │           ├── Backend.Domain.deps.json
+│   │           ├── Backend.Domain.dll
+│   │           └── Backend.Domain.pdb
+│   ├── Entities
+│   │   ├── GlobalRole.cs
+│   │   ├── GlobalScope.cs
+│   │   ├── MachineClientCertificate.cs
+│   │   ├── MachineClientCertificateStatus.cs
+│   │   ├── MachineClient.cs
+│   │   └── User.cs
+│   ├── Exceptions
+│   │   ├── ConflictException.cs
+│   │   ├── NotFoundException.cs
+│   │   └── ValidationException.cs
+│   ├── obj
+│   │   ├── Backend.Domain.csproj.nuget.dgspec.json
+│   │   ├── Backend.Domain.csproj.nuget.g.props
+│   │   ├── Backend.Domain.csproj.nuget.g.targets
+│   │   ├── Debug
+│   │   │   └── net8.0
+│   │   │       ├── Backend.Domain.AssemblyInfo.cs
+│   │   │       ├── Backend.Domain.AssemblyInfoInputs.cache
+│   │   │       ├── Backend.Domain.assets.cache
+│   │   │       ├── Backend.Domain.csproj.CoreCompileInputs.cache
+│   │   │       ├── Backend.Domain.csproj.FileListAbsolute.txt
+│   │   │       ├── Backend.Domain.dll
+│   │   │       ├── Backend.Domain.GeneratedMSBuildEditorConfig.editorconfig
+│   │   │       ├── Backend.Domain.GlobalUsings.g.cs
+│   │   │       ├── Backend.Domain.pdb
+│   │   │       ├── Backend.Domain.sourcelink.json
+│   │   │       ├── ref
+│   │   │       │   └── Backend.Domain.dll
+│   │   │       └── refint
+│   │   │           └── Backend.Domain.dll
+│   │   ├── project.assets.json
+│   │   ├── project.nuget.cache
+│   │   └── Release
+│   │       └── net8.0
+│   │           ├── Backend.Domain.AssemblyInfo.cs
+│   │           ├── Backend.Domain.AssemblyInfoInputs.cache
+│   │           ├── Backend.Domain.assets.cache
+│   │           ├── Backend.Domain.csproj.CoreCompileInputs.cache
+│   │           ├── Backend.Domain.csproj.FileListAbsolute.txt
+│   │           ├── Backend.Domain.dll
+│   │           ├── Backend.Domain.GeneratedMSBuildEditorConfig.editorconfig
+│   │           ├── Backend.Domain.GlobalUsings.g.cs
+│   │           ├── Backend.Domain.pdb
+│   │           ├── Backend.Domain.sourcelink.json
+│   │           ├── ref
+│   │           │   └── Backend.Domain.dll
+│   │           └── refint
+│   │               └── Backend.Domain.dll
+│   ├── Repositories
+│   │   ├── IGlobalRoleRepository.cs
+│   │   ├── IGlobalScopeRepository.cs
+│   │   ├── IMachineClientCertificateRepository.cs
+│   │   ├── IMachineClientRepository.cs
+│   │   └── IUserRepository.cs
+│   └── Services
+│       ├── CertificateAuthorityCertificate.cs
+│       ├── IJwtSigningKeyStore.cs
+│       ├── ILocalCertificateAuthority.cs
+│       ├── IssuedClientCertificate.cs
+│       └── JwtSigningKey.cs
+├── Backend.Infrastructure
+│   ├── Backend.Infrastructure.csproj
+│   ├── bin
+│   │   └── Debug
+│   │       └── net8.0
+│   │           ├── Backend.Domain.dll
+│   │           ├── Backend.Domain.pdb
+│   │           ├── Backend.Infrastructure.deps.json
+│   │           ├── Backend.Infrastructure.dll
+│   │           ├── Backend.Infrastructure.pdb
+│   │           └── Backend.Infrastructure.runtimeconfig.json
+│   ├── Certificates
+│   │   └── LocalDevelopmentCertificateAuthority.cs
+│   ├── Extensions
+│   │   └── ServiceCollectionExtensions.cs
+│   ├── Migrations
+│   │   ├── 20260513204405_InitialCreate.cs
+│   │   ├── 20260513204405_InitialCreate.Designer.cs
+│   │   ├── 20260514114300_AddAuthorizationServerClientMetadata.cs
+│   │   ├── 20260514114300_AddAuthorizationServerClientMetadata.Designer.cs
+│   │   ├── 20260514175738_AddMachineClientCertificates.cs
+│   │   ├── 20260514175738_AddMachineClientCertificates.Designer.cs
+│   │   ├── 20260515141551_AddAccessManagement.cs
+│   │   ├── 20260515141551_AddAccessManagement.Designer.cs
+│   │   └── AppDbContextModelSnapshot.cs
+│   ├── obj
+│   │   ├── Backend.Infrastructure.csproj.EntityFrameworkCore.targets
+│   │   ├── Backend.Infrastructure.csproj.nuget.dgspec.json
+│   │   ├── Backend.Infrastructure.csproj.nuget.g.props
+│   │   ├── Backend.Infrastructure.csproj.nuget.g.targets
+│   │   ├── Debug
+│   │   │   └── net8.0
+│   │   │       ├── Backend.Infrastructure.AssemblyInfo.cs
+│   │   │       ├── Backend.Infrastructure.AssemblyInfoInputs.cache
+│   │   │       ├── Backend.Infrastructure.assets.cache
+│   │   │       ├── Backend.Infrastructure.csproj.AssemblyReference.cache
+│   │   │       ├── Backend.Infrastructure.csproj.CopyComplete
+│   │   │       ├── Backend.Infrastructure.csproj.CoreCompileInputs.cache
+│   │   │       ├── Backend.Infrastructure.csproj.FileListAbsolute.txt
+│   │   │       ├── Backend.Infrastructure.dll
+│   │   │       ├── Backend.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+│   │   │       ├── Backend.Infrastructure.genruntimeconfig.cache
+│   │   │       ├── Backend.Infrastructure.GlobalUsings.g.cs
+│   │   │       ├── Backend.Infrastructure.pdb
+│   │   │       ├── Backend.Infrastructure.sourcelink.json
+│   │   │       ├── ref
+│   │   │       │   └── Backend.Infrastructure.dll
+│   │   │       └── refint
+│   │   │           └── Backend.Infrastructure.dll
+│   │   ├── project.assets.json
+│   │   ├── project.nuget.cache
+│   │   └── Release
+│   │       └── net8.0
+│   │           ├── Backend.Infrastructure.AssemblyInfo.cs
+│   │           ├── Backend.Infrastructure.AssemblyInfoInputs.cache
+│   │           ├── Backend.Infrastructure.assets.cache
+│   │           ├── Backend.Infrastructure.csproj.AssemblyReference.cache
+│   │           ├── Backend.Infrastructure.csproj.CoreCompileInputs.cache
+│   │           ├── Backend.Infrastructure.csproj.FileListAbsolute.txt
+│   │           ├── Backend.Infrastructure.dll
+│   │           ├── Backend.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+│   │           ├── Backend.Infrastructure.genruntimeconfig.cache
+│   │           ├── Backend.Infrastructure.GlobalUsings.g.cs
+│   │           ├── Backend.Infrastructure.pdb
+│   │           ├── Backend.Infrastructure.sourcelink.json
+│   │           ├── ref
+│   │           │   └── Backend.Infrastructure.dll
+│   │           └── refint
+│   │               └── Backend.Infrastructure.dll
+│   ├── Persistence
+│   │   └── AppDbContext.cs
+│   ├── Repositories
+│   │   ├── GlobalRoleRepository.cs
+│   │   ├── GlobalScopeRepository.cs
+│   │   ├── MachineClientCertificateRepository.cs
+│   │   ├── MachineClientRepository.cs
+│   │   └── UserRepository.cs
+│   └── Signing
+│       └── LocalJwtSigningKeyStore.cs
+├── Backend.Mcp
+│   ├── Api
+│   │   ├── EmptyResponse.cs
+│   │   ├── IdmApiCallResult.cs
+│   │   ├── IdmApiClient.cs
+│   │   ├── IdmApiException.cs
+│   │   └── IIdmApiClient.cs
+│   ├── Backend.Mcp.csproj
+│   ├── bin
+│   │   └── Debug
+│   │       └── net8.0
+│   │           ├── Backend.Application.dll
+│   │           ├── Backend.Application.pdb
+│   │           ├── Backend.Domain.dll
+│   │           ├── Backend.Domain.pdb
+│   │           ├── Backend.Mcp
+│   │           ├── Backend.Mcp.deps.json
+│   │           ├── Backend.Mcp.dll
+│   │           ├── Backend.Mcp.pdb
+│   │           ├── Backend.Mcp.runtimeconfig.json
+│   │           ├── Microsoft.Bcl.TimeProvider.dll
+│   │           ├── Microsoft.Extensions.AI.Abstractions.dll
+│   │           ├── Microsoft.Extensions.Caching.Abstractions.dll
+│   │           ├── Microsoft.Extensions.Configuration.Abstractions.dll
+│   │           ├── Microsoft.Extensions.Configuration.Binder.dll
+│   │           ├── Microsoft.Extensions.Configuration.CommandLine.dll
+│   │           ├── Microsoft.Extensions.Configuration.dll
+│   │           ├── Microsoft.Extensions.Configuration.EnvironmentVariables.dll
+│   │           ├── Microsoft.Extensions.Configuration.FileExtensions.dll
+│   │           ├── Microsoft.Extensions.Configuration.Json.dll
+│   │           ├── Microsoft.Extensions.Configuration.UserSecrets.dll
+│   │           ├── Microsoft.Extensions.DependencyInjection.Abstractions.dll
+│   │           ├── Microsoft.Extensions.DependencyInjection.dll
+│   │           ├── Microsoft.Extensions.Diagnostics.Abstractions.dll
+│   │           ├── Microsoft.Extensions.Diagnostics.dll
+│   │           ├── Microsoft.Extensions.FileProviders.Abstractions.dll
+│   │           ├── Microsoft.Extensions.FileProviders.Physical.dll
+│   │           ├── Microsoft.Extensions.FileSystemGlobbing.dll
+│   │           ├── Microsoft.Extensions.Hosting.Abstractions.dll
+│   │           ├── Microsoft.Extensions.Hosting.dll
+│   │           ├── Microsoft.Extensions.Http.dll
+│   │           ├── Microsoft.Extensions.Logging.Abstractions.dll
+│   │           ├── Microsoft.Extensions.Logging.Configuration.dll
+│   │           ├── Microsoft.Extensions.Logging.Console.dll
+│   │           ├── Microsoft.Extensions.Logging.Debug.dll
+│   │           ├── Microsoft.Extensions.Logging.dll
+│   │           ├── Microsoft.Extensions.Logging.EventLog.dll
+│   │           ├── Microsoft.Extensions.Logging.EventSource.dll
+│   │           ├── Microsoft.Extensions.Options.ConfigurationExtensions.dll
+│   │           ├── Microsoft.Extensions.Options.dll
+│   │           ├── Microsoft.Extensions.Primitives.dll
+│   │           ├── Microsoft.IdentityModel.Abstractions.dll
+│   │           ├── Microsoft.IdentityModel.JsonWebTokens.dll
+│   │           ├── Microsoft.IdentityModel.Logging.dll
+│   │           ├── Microsoft.IdentityModel.Tokens.dll
+│   │           ├── ModelContextProtocol.Core.dll
+│   │           ├── ModelContextProtocol.dll
+│   │           ├── runtimes
+│   │           │   ├── browser
+│   │           │   │   └── lib
+│   │           │   │       └── net8.0
+│   │           │   │           └── System.Text.Encodings.Web.dll
+│   │           │   └── win
+│   │           │       └── lib
+│   │           │           └── net8.0
+│   │           │               ├── System.Diagnostics.EventLog.dll
+│   │           │               └── System.Diagnostics.EventLog.Messages.dll
+│   │           ├── System.Diagnostics.DiagnosticSource.dll
+│   │           ├── System.Diagnostics.EventLog.dll
+│   │           ├── System.IO.Pipelines.dll
+│   │           ├── System.Net.ServerSentEvents.dll
+│   │           ├── System.Text.Encodings.Web.dll
+│   │           └── System.Text.Json.dll
+│   ├── IdmApiInstanceOptions.cs
+│   ├── IdmApiInstanceResolver.cs
+│   ├── IdmApiInstancesOptions.cs
+│   ├── IIdmApiInstanceResolver.cs
+│   ├── IMcpMutationGuard.cs
+│   ├── McpConfigurationException.cs
+│   ├── McpMutationGuard.cs
+│   ├── McpRuntimeOptions.cs
+│   ├── McpToolException.cs
+│   ├── obj
+│   │   ├── Backend.Mcp.csproj.nuget.dgspec.json
+│   │   ├── Backend.Mcp.csproj.nuget.g.props
+│   │   ├── Backend.Mcp.csproj.nuget.g.targets
+│   │   ├── Debug
+│   │   │   └── net8.0
+│   │   │       ├── apphost
+│   │   │       ├── Backend.Mcp.AssemblyInfo.cs
+│   │   │       ├── Backend.Mcp.AssemblyInfoInputs.cache
+│   │   │       ├── Backend.Mcp.assets.cache
+│   │   │       ├── Backend.Mcp.csproj.AssemblyReference.cache
+│   │   │       ├── Backend.Mcp.csproj.CopyComplete
+│   │   │       ├── Backend.Mcp.csproj.CoreCompileInputs.cache
+│   │   │       ├── Backend.Mcp.csproj.FileListAbsolute.txt
+│   │   │       ├── Backend.Mcp.dll
+│   │   │       ├── Backend.Mcp.GeneratedMSBuildEditorConfig.editorconfig
+│   │   │       ├── Backend.Mcp.genruntimeconfig.cache
+│   │   │       ├── Backend.Mcp.GlobalUsings.g.cs
+│   │   │       ├── Backend.Mcp.pdb
+│   │   │       ├── Backend.Mcp.sourcelink.json
+│   │   │       ├── ref
+│   │   │       │   └── Backend.Mcp.dll
+│   │   │       └── refint
+│   │   │           └── Backend.Mcp.dll
+│   │   ├── project.assets.json
+│   │   └── project.nuget.cache
+│   ├── Program.cs
+│   ├── ResolvedIdmApiInstance.cs
+│   ├── ServiceCollectionExtensions.cs
+│   └── Tools
+│       ├── ClientCredentialStatusResult.cs
+│       ├── IdmAdminTools.cs
+│       ├── OnboardMachineClientResult.cs
+│       ├── OnboardMachineClientStep.cs
+│       └── OperationResult.cs
+└── tree.txt
+
+154 directories, 507 files

@@ -18,7 +18,7 @@ Epic 4 (complete) — Optional DPoP-bound access token issuance, DPoP proof vali
 
 Epic 5 (complete) — Global role and scope catalog management, user role assignment, machine-client role/scope assignment validation, and active catalog filtering during token issuance.
 
-Planned: MCP administrative interface.
+Epic 6 (complete) — MCP administrative interface over stdio for user, machine-client, role, scope, certificate, discovery, and JWKS operations.
 
 See [product.md](product.md) for the full roadmap.
 
@@ -77,11 +77,13 @@ DELETE /scim/v2/Scopes/{id}
 
 ```
 GET    /scim/v2/Certificates/Authority
-POST   /scim/v2/Clients/{clientId}/Certificates
-GET    /scim/v2/Clients/{clientId}/Certificates
-GET    /scim/v2/Clients/{clientId}/Certificates/{certificateId}
-POST   /scim/v2/Clients/{clientId}/Certificates/{certificateId}/Revoke
+POST   /scim/v2/Clients/{clientRecordId}/Certificates
+GET    /scim/v2/Clients/{clientRecordId}/Certificates
+GET    /scim/v2/Clients/{clientRecordId}/Certificates/{certificateId}
+POST   /scim/v2/Clients/{clientRecordId}/Certificates/{certificateId}/Revoke
 ```
+
+`clientRecordId` is the internal GUID returned as `id` by `/scim/v2/Clients`. It is not the external OAuth `clientId` string.
 
 ### Authorization Server
 
@@ -98,6 +100,129 @@ POST /connect/token
 When a token request omits `DPoP`, the server issues a certificate-bound bearer token with `cnf.x5t#S256`. When a request includes a valid `DPoP` proof JWT, the server issues a DPoP-bound token with `token_type=DPoP` and `cnf.jkt`.
 
 Swagger UI is available at `/swagger` when running in Development mode.
+
+---
+
+## MCP server
+
+`Backend.Mcp` exposes the administrative API as an MCP server named `idm-demo-mcp`. The default transport is stdio for local agent workflows. Hosted HTTP transport is opt-in for remote agent clients and calls `Backend.Api` using the configured internal administrative API key.
+
+Start the API first:
+
+```bash
+AdminApi__ApiKey=changeme-development-key \
+AuthorizationServer__Issuer=http://localhost:5000 \
+AuthorizationServer__EnableForwardedClientCertificate=true \
+ConnectionStrings__Default="Data Source=idm-demo.db" \
+dotnet run --project src/Backend.Api --urls http://localhost:5000
+```
+
+Run the MCP server with a configured IdM API instance:
+
+```bash
+IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
+IdmApiInstances__local__ApiKey=changeme-development-key \
+Mcp__DefaultInstance=local \
+Mcp__Transport=Stdio \
+Mcp__ReadOnly=false \
+dotnet run --project src/Backend.Mcp
+```
+
+Set `Mcp__ReadOnly=true` to block mutating and destructive tools. Destructive tools also require `confirm: true`.
+
+Run the hosted MCP transport:
+
+```bash
+IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
+IdmApiInstances__local__ApiKey=changeme-development-key \
+Mcp__DefaultInstance=local \
+Mcp__Transport=Http \
+Mcp__ReadOnly=false \
+Mcp__Hosted__RequireDpop=true \
+Mcp__Hosted__AllowBearerTokensForDevelopment=false \
+Mcp__Hosted__Audience=idm-demo-mcp \
+dotnet run --project src/Backend.Mcp --urls http://localhost:5100
+```
+
+With `Backend.Api` running on `http://localhost:5000` and hosted `Backend.Mcp`
+running on `http://localhost:5100`, run the hosted transport demo:
+
+```bash
+bash scripts/demo-hosted-mcp.sh
+```
+
+Environment overrides:
+
+```bash
+API_BASE_URL=http://localhost:5000 \
+MCP_BASE_URL=http://localhost:5100 \
+API_KEY=changeme-development-key \
+bash scripts/demo-hosted-mcp.sh --verbose
+```
+
+Hosted MCP endpoints:
+
+```
+POST /mcp
+GET  /health/live
+GET  /health/ready
+```
+
+`/health/ready` validates hosted auth configuration and checks each configured IdM API instance for reachability. In production, put `Backend.Mcp` behind a reverse proxy or ingress that owns TLS termination and edge controls. Keep `Backend.Api` and `Backend.Mcp` private behind that proxy; strip and recreate forwarded headers at the trusted proxy boundary only. The configured IdM API key is an internal MCP-to-API credential and must not be accepted from or exposed to hosted MCP callers.
+
+### MCP tools
+
+User tools:
+
+```
+idm_create_user
+idm_get_user
+idm_update_user
+idm_delete_user
+```
+
+Machine-client tools:
+
+```
+idm_create_machine_client
+idm_get_machine_client
+idm_list_machine_clients
+idm_update_machine_client
+idm_delete_machine_client
+idm_onboard_machine_client
+```
+
+Role and scope tools:
+
+```
+idm_create_global_role
+idm_update_global_role
+idm_delete_global_role
+idm_create_global_scope
+idm_update_global_scope
+idm_delete_global_scope
+```
+
+Certificate and authorization-server tools:
+
+```
+idm_register_external_client_certificate
+idm_issue_client_certificate_from_csr
+idm_list_client_certificates
+idm_get_client_certificate
+idm_revoke_client_certificate
+idm_inspect_client_credential_status
+idm_get_certificate_authority
+idm_get_authorization_server_metadata
+idm_get_jwks
+```
+
+`idm_list_machine_clients` includes certificate collection summaries and active certificate metadata for each returned client. The legacy single-certificate fields on the underlying SCIM client resource are retained only for compatibility and do not describe the certificate collection.
+
+Certificate MCP tools accept either the internal client record GUID or the external machine-client `clientId` such as `order-agent`. The MCP layer resolves external client IDs before calling the certificate API.
+
+`idm_issue_client_certificate_from_csr` accepts optional `validityDays` from 1 to 90 and returns the signed public certificate as top-level `certificatePem`.
+`idm_onboard_machine_client` can create or update a machine client, assign roles/scopes, and optionally register or issue an initial certificate from either an external certificate PEM or a CSR. CSR-issued certificates currently accept `certificateValidityDays` from 1 to 90.
 
 ---
 
@@ -148,7 +273,8 @@ API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-access-managem
 │   ├── Backend.Api/            # ASP.NET Core Web API, controllers, middleware, Program.cs
 │   ├── Backend.Application/    # Services, DTOs, SCIM filter parser
 │   ├── Backend.Domain/         # Entities, repository interfaces, domain exceptions
-│   └── Backend.Infrastructure/ # EF Core DbContext, SQLite, repositories, migrations
+│   ├── Backend.Infrastructure/ # EF Core DbContext, SQLite, repositories, migrations
+│   └── Backend.Mcp/            # stdio MCP server and administrative MCP tools
 ├── tests/
 │   ├── Backend.Tests/          # Unit tests (xUnit + NSubstitute)
 │   └── Backend.IntegrationTests/ # End-to-end tests (WebApplicationFactory + SQLite)
@@ -242,6 +368,16 @@ Hooks run automatically on `git commit`:
     "DpopProofLifetimeSeconds": 300,
     "DpopReplayCacheSeconds": 300,
     "DpopSupportedAlgorithms": [ "ES256", "RS256" ]
+  },
+  "IdmApiInstances": {
+    "local": {
+      "BaseUrl": "http://127.0.0.1:5000",
+      "ApiKey": "changeme-development-key"
+    }
+  },
+  "Mcp": {
+    "DefaultInstance": "local",
+    "ReadOnly": false
   }
 }
 ```
@@ -252,6 +388,8 @@ Override via environment variables for deployment:
 AdminApi__ApiKey=secret \
 ConnectionStrings__Default="Data Source=/data/idm.db" \
 AuthorizationServer__Issuer=https://issuer.example.test \
+IdmApiInstances__local__BaseUrl=https://issuer.example.test \
+IdmApiInstances__local__ApiKey=secret \
 dotnet run
 ```
 

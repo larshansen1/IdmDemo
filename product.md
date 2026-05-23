@@ -616,6 +616,8 @@ Potential capabilities:
 Hosted MCP should still use the same application service and authorization boundaries
 as the direct API. It must not become a privileged backdoor around the API contract.
 
+Detailed design: `docs/epic-7-hosted-mcp-and-agent-workflows.md`.
+
 ---
 
 ## Technical Stack

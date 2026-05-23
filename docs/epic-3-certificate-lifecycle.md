@@ -43,7 +43,7 @@ All certificate endpoints use the existing administrative API-key protection, co
 
 `POST /scim/v2/Clients/{id}/Certificates` supports two modes:
 
-1. CSR issuance: submit a PEM-encoded CSR and optional validity request.
+1. CSR issuance: submit a PEM-encoded CSR and optional validity request from 1 to 90 days.
 2. External registration: submit a PEM-encoded public certificate and optional metadata.
 
 The request must explicitly identify the mode so validation and audit logs are unambiguous.
