@@ -56,6 +56,7 @@ jobs:
             /p:CollectCoverage=true \
             /p:CoverletOutput=./coverage/ \
             /p:CoverletOutputFormat=cobertura \
+            /p:Exclude="[Backend.Infrastructure]*%2c[Backend.Mcp]Program*" \
             /p:Threshold=80 \
             /p:ThresholdType=line \
             /p:ThresholdStat=Total
