@@ -4,6 +4,7 @@ DUPLICATE_THRESHOLD  := 5
 
 COVERAGE_DIR  := coverage
 RESULTS_DIR   := TestResults
+COVERAGE_EXCLUDE := [Backend.Infrastructure]*%2c[Backend.Mcp]Program*
 
 .PHONY: all check build test coverage lint format complexity duplicates \
         security secrets vulnerabilities install-tools _install-gitleaks \
@@ -38,6 +39,7 @@ coverage:
 		/p:CollectCoverage=true \
 		/p:CoverletOutput=./$(COVERAGE_DIR)/ \
 		/p:CoverletOutputFormat=cobertura \
+		/p:Exclude="$(COVERAGE_EXCLUDE)" \
 		/p:Threshold=$(COVERAGE_THRESHOLD) \
 		/p:ThresholdType=line \
 		/p:ThresholdStat=Total

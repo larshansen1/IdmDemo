@@ -121,7 +121,215 @@ Epic 7 implementation.
 - Extend the current mutation guard into a hosted-aware authorization guard.
 - Ensure hosted callers cannot pass, override, or observe the internal API key.
 
-### Phase 3: Audit and Destructive Action Safety
+Phase 2 implementation decisions:
+
+- `Backend.Mcp` validates IdmDemo-issued JWT access tokens locally instead of
+  calling back to `Backend.Api` for introspection.
+- Production hosted MCP requires DPoP-bound access tokens. Bearer tokens are
+  accepted only when `Mcp:Hosted:AllowBearerTokensForDevelopment = true`.
+- Stdio MCP remains a local development transport. It keeps the existing
+  read-only and destructive confirmation behavior and does not require caller
+  tokens.
+- Tool policy is derived from existing MCP tool metadata plus a central MCP
+  scope map, not from per-tool external configuration in the first
+  implementation.
+- MCP global scopes are documented and testable setup data. Automatic catalog
+  seeding is deferred unless operational testing shows it is needed.
+- Certificate mutating tools require `idm.mcp.certificates` plus the matching
+  write or destructive scope.
+- Hosted callers cannot influence the internal API key. Regression tests must
+  prove request headers or tool arguments cannot override or expose it.
+
+Phase 2 work items:
+
+1. Add hosted token validation services to `Backend.Mcp`.
+   - Configure issuer, audience, signing key discovery, and token lifetime
+     validation for IdmDemo-issued access tokens.
+   - Validate the `aud` claim against `Mcp:Hosted:Audience`.
+   - Extract subject, client id, scopes, token type, and DPoP confirmation data
+     into a hosted MCP caller context.
+2. Add hosted DPoP request validation.
+   - Require a valid `DPoP` proof for hosted requests when
+     `Mcp:Hosted:RequireDpop = true`.
+   - Bind the proof to the presented access token and hosted MCP request
+     method/URI.
+   - Permit bearer-only validation only when the explicit development bearer
+     flag is enabled.
+3. Replace the mutation-only guard with a hosted-aware authorization guard.
+   - Preserve the existing stdio read-only and destructive confirmation
+     behavior.
+   - For hosted calls, require `idm.mcp.read` for read-only tools.
+   - Require `idm.mcp.write` for non-destructive mutating tools.
+   - Require `idm.mcp.destructive` and `confirm: true` for destructive tools.
+   - Require `idm.mcp.certificates` for certificate issuance, registration, and
+     revocation tools in addition to write or destructive authorization.
+4. Define MCP tool policy metadata.
+   - Use the existing `ReadOnly` and `Destructive` tool attributes as the base
+     policy source.
+   - Add a central mapping for special requirements such as certificate tools.
+   - Keep policy names aligned with the tool names exposed over MCP.
+5. Isolate the internal API credential from hosted callers.
+   - Keep `IdmApiInstances:*:ApiKey` as an internal MCP-to-API credential.
+   - Do not accept caller-supplied API keys through hosted request headers,
+     forwarded identity headers, or tool parameters.
+   - Ensure error responses and tool results never disclose the configured API
+     key.
+6. Add Phase 2 tests.
+   - Unit test token validation, DPoP enforcement, scope checks, read-only mode,
+     destructive confirmation, and certificate scope requirements.
+   - Integration test hosted MCP rejects unauthenticated requests and
+     insufficient scopes.
+   - Integration test hosted MCP accepts a valid scoped DPoP-bound token.
+   - Regression test API key override attempts are ignored or rejected.
+   - Keep stdio MCP smoke coverage passing unchanged.
+
+Phase 2 exit criteria:
+
+- Hosted `/mcp` requests without a valid IdmDemo access token are rejected.
+- Production hosted configuration requires DPoP-bound access tokens.
+- Development bearer-token mode works only behind the explicit configuration
+  flag.
+- All hosted tool calls are authorized from tool metadata and MCP scopes before
+  the underlying API is called.
+- Certificate mutation tools require both certificate and mutation/destructive
+  authorization.
+- The internal MCP-to-API key remains unobservable and non-overridable by hosted
+  callers.
+- Existing stdio MCP behavior remains compatible with Phase 1.
+
+### Phase 3: Authentication Profile Simplification
+
+Phase 2 intentionally keeps the first hosted-auth implementation close to the
+underlying switches: transport, DPoP requirement, development bearer allowance,
+audience, read-only mode, and internal API credentials. That is useful for
+incremental delivery, but it creates too many valid-looking combinations for
+operators to reason about.
+
+Phase 3 should replace the loose authentication switch matrix with explicit
+runtime profiles. A profile is a named security posture that derives the lower
+level settings and rejects contradictory configuration.
+
+`Mcp:Profile` is the source of truth for runtime security posture. Lower-level
+settings are either derived effective values or explicitly documented
+non-weakening overrides. Runtime code should consume resolved effective MCP
+settings, not independently reason over the raw configuration switch matrix.
+
+The intended resolution model is:
+
+```text
+raw Mcp configuration -> profile resolver -> effective runtime settings -> MCP runtime/auth/tool behavior
+```
+
+Effective settings should include the selected profile, transport, caller
+authentication requirement, DPoP requirement, bearer-token allowance, audience,
+and read-only posture. Validation and readiness should report against these
+effective settings so tests verify the actual security posture rather than only
+the raw input flags.
+
+Initial profiles:
+
+| Profile | Intended use | Effective behavior |
+|---|---|---|
+| `LocalStdio` | Default developer-machine workflow | `Stdio` transport, no hosted caller token, local read-only and `confirm` guards only |
+| `LocalHostedDevelopment` | Local HTTP MCP testing and automated integration tests | `Http` transport on localhost, bearer tokens allowed, DPoP accepted, production exposure disallowed |
+| `HostedProduction` | Remote agent access behind a trusted reverse proxy | `Http` transport, DPoP-bound access tokens required, bearer tokens rejected, hosted read-only default unless explicitly overridden |
+
+Phase 3 work items:
+
+1. Add `Mcp:Profile = LocalStdio | LocalHostedDevelopment | HostedProduction`.
+   - Keep `LocalStdio` as the default when no profile is configured.
+   - Continue supporting the lower-level settings only as derived/effective
+     values or explicit advanced overrides with validation.
+   - Reject lower-level overrides that contradict or weaken the selected
+     profile's security guarantees.
+   - Treat `Mcp:Transport` as profile-derived when a profile is selected. If the
+     raw transport setting remains accepted for compatibility, it must match the
+     selected profile's derived transport.
+2. Centralize profile validation.
+   - Reject `HostedProduction` when bearer tokens are enabled.
+   - Reject `HostedProduction` when DPoP is disabled.
+   - Reject `LocalHostedDevelopment` unless hosted HTTP binding is local-only or
+     the environment is explicitly marked as development/test.
+   - Reject invalid combinations such as hosted HTTP with neither DPoP nor
+     development bearer enabled.
+   - Define the development/test signal used by validation, such as
+     `ASPNETCORE_ENVIRONMENT`, `DOTNET_ENVIRONMENT`, or an explicit MCP-specific
+     escape hatch.
+   - Define what counts as local-only hosted binding, including loopback hosts
+     such as `localhost`, `127.0.0.1`, and `[::1]`, and excluding wildcard or
+     public bindings unless explicitly allowed for development/test.
+3. Make API exposure rules explicit.
+   - Document that public production traffic reaches only the hosted MCP service,
+     not `Backend.Api`.
+   - Keep `Backend.Api` administrative routes protected by the internal
+     credential while they remain private-network only.
+   - Treat discovery and token issuance endpoints separately from administrative
+     API routes.
+4. Separate token audiences by resource.
+   - Require MCP callers to present tokens whose audience matches
+     `Mcp:Hosted:Audience`.
+   - Document that API tokens and MCP tokens are separate resource tokens unless
+     a later authorization-server change introduces first-class resource
+     indicators or multi-audience issuance.
+   - Clarify DPoP token issuance and resource-call behavior: the token endpoint
+     validates a signed DPoP proof and embeds the proof key thumbprint in the
+     issued access token `cnf.jkt`; each hosted MCP resource request must still
+     present a fresh DPoP proof whose key thumbprint matches that token
+     confirmation claim.
+5. Update readiness and documentation.
+   - Readiness should report the selected profile and derived auth posture.
+   - Readiness should distinguish raw configuration from effective runtime
+     settings, including profile, transport, caller authentication requirement,
+     DPoP requirement, bearer-token allowance, audience, and read-only posture.
+   - Deployment docs should show one local stdio profile, one local hosted test
+     profile, and one production hosted profile.
+6. Add a profile security test matrix.
+   - Each profile must have positive and negative tests for startup validation,
+     accepted authentication methods, rejected authentication methods, and tool
+     scope enforcement.
+   - Security posture tests should run against derived effective settings, not
+     only the raw input configuration.
+
+Phase 3 profile security test matrix:
+
+| Profile | Positive tests | Negative tests |
+|---|---|---|
+| `LocalStdio` | Stdio MCP starts without caller token auth; local read-only and `confirm` guards still work | Hosted `/mcp` is not exposed by default |
+| `LocalHostedDevelopment` | Hosted MCP accepts bearer tokens in development/test; hosted MCP accepts DPoP-bound tokens; MCP scopes are enforced | Bearer tokens are rejected outside development/test; missing scopes fail; public/non-local binding fails unless explicitly allowed |
+| `HostedProduction` | Hosted MCP accepts valid DPoP-bound tokens with the configured MCP audience and required scopes | Bearer tokens are rejected; missing DPoP proof is rejected; `AllowBearerTokensForDevelopment = true` fails startup; `RequireDpop = false` fails startup; wrong token audience is rejected |
+| API boundary | MCP can call private `Backend.Api` with the internal MCP-to-API credential | Hosted callers cannot pass, override, or observe `X-Api-Key`; production docs never describe API administrative routes as public bearer/DPoP resources |
+
+Phase 3 exit criteria:
+
+- There are no ambiguous production-valid bearer/DPoP combinations.
+- Operators can select one profile instead of manually composing transport and
+  authentication switches.
+- Hosted production always requires DPoP-bound access tokens.
+- Hosted development bearer support is impossible to enable accidentally in a
+  production profile.
+- The profile security test matrix has positive and negative coverage for every
+  supported profile.
+- The API/MCP endpoint authentication matrix can be documented as profile-based
+  behavior, not a cross-product of independent flags.
+
+Phase 3 implementation status:
+
+| Status | Item | Notes |
+|---|---|---|
+| Done | Profile model and resolver | `Mcp:Profile` supports `LocalStdio`, `LocalHostedDevelopment`, and `HostedProduction`; runtime code resolves effective settings before selecting transport/auth behavior. |
+| Done | Profile-derived transport | Startup uses resolved effective transport instead of independently branching on raw `Mcp:Transport`. |
+| Done | Hosted auth consumes effective posture | Hosted authentication uses resolved DPoP and bearer-development behavior. |
+| Done | Tool policy consumes effective posture | MCP tool authorization uses resolved transport and read-only posture. |
+| Done | Readiness reports effective posture | Readiness includes profile, transport, caller-auth requirement, DPoP requirement, bearer allowance, audience, and read-only posture. |
+| Done | Profile-oriented demo scripts | Demo scripts are split by `LocalStdio`, `LocalHostedDevelopment`, and `HostedProduction`; `demo-hosted-mcp.sh` remains a compatibility wrapper. |
+| Partial | Profile validation | Contradictory transport, DPoP, and bearer overrides are rejected; local-hosted public-binding checks exist but still need DI wiring verified against runtime configuration/environment. |
+| Partial | Documentation | README shows profile-based startup and demos; it still needs explicit API/MCP audience separation and development/test escape-hatch guidance. |
+| Partial | Local hosted DPoP coverage | `LocalHostedDevelopment` bearer demo exists; DPoP acceptance in that profile still needs script or integration-test coverage. |
+| Missing | Readiness raw-vs-effective distinction | Readiness reports effective posture but does not separately expose raw input configuration. |
+| Missing | Complete profile security test matrix | Positive/negative coverage is incomplete for hosted `/mcp` exposure, bearer rejection outside dev/test, wrong audience, missing DPoP proof, missing scopes, and API-key boundary regressions. |
+| Missing | API boundary profile documentation | Production docs still need an explicit matrix showing hosted MCP as the public resource and `Backend.Api` administrative routes as private/internal-key protected. |
+
+### Phase 4: Audit and Destructive Action Safety
 
 - Add `McpToolInvoked`, `McpToolDenied`, `McpToolFailed`, and `McpToolSucceeded`
   audit events.
@@ -130,9 +338,10 @@ Epic 7 implementation.
   revocation.
 - Log denied attempts with security-relevant context.
 
-### Phase 4: Higher-Level Workflow Tools
+### Phase 5: Higher-Level Workflow Tools
 
-- Add workflow tools only after hosted auth, policy, and audit are in place.
+- Add workflow tools only after hosted auth, profile validation, policy, and audit
+  are in place.
 - Implement workflows as orchestration over the existing API contract.
 - Initial workflow tools:
   - rotate machine-client certificate,
@@ -141,14 +350,15 @@ Epic 7 implementation.
   - preflight machine-client credential status before deployment.
 - Return structured step results that are easy for agents and tests to inspect.
 
-### Phase 5: Deployment and Operations Hardening
+### Phase 6: Deployment and Operations Hardening
 
 - Add container and reverse-proxy examples for `Backend.Api` and hosted
   `Backend.Mcp`.
-- Default hosted MCP to read-only unless explicitly configured otherwise.
+- Default `HostedProduction` MCP to read-only unless explicitly configured
+  otherwise.
 - Supply secrets through environment variables or a deployment config provider.
 - Document TLS termination, trusted forwarded headers, DPoP requirements, MCP
-  scopes, secret rotation, health checks, and audit review.
+  scopes, profile selection, secret rotation, health checks, and audit review.
 - Keep SQLite supported for the learning version without blocking a later PostgreSQL
   migration.
 
@@ -159,6 +369,7 @@ Recommended new configuration:
 ```json
 {
   "Mcp": {
+    "Profile": "LocalStdio",
     "Transport": "Stdio",
     "ReadOnly": false,
     "Hosted": {
@@ -170,11 +381,25 @@ Recommended new configuration:
 }
 ```
 
+Recommended Phase 3 profile-oriented configuration:
+
+```json
+{
+  "Mcp": {
+    "Profile": "HostedProduction",
+    "Hosted": {
+      "Audience": "idm-demo-mcp"
+    }
+  }
+}
+```
+
 ## Testing Plan
 
 Unit tests should cover:
 
 - transport option validation,
+- profile validation and derived effective settings,
 - hosted authorization guard scope checks,
 - read-only mode enforcement,
 - destructive confirmation enforcement,
@@ -186,6 +411,9 @@ Integration tests should cover:
 - hosted MCP rejects unauthenticated requests,
 - hosted MCP rejects missing or insufficient scopes,
 - hosted MCP accepts valid scoped DPoP-bound tokens,
+- hosted production rejects bearer tokens regardless of lower-level overrides,
+- local hosted development accepts bearer tokens only in development/test
+  posture,
 - destructive tools require both scope and `confirm: true`,
 - stdio MCP still works as before,
 - hosted health endpoint reports API connectivity.
@@ -193,6 +421,7 @@ Integration tests should cover:
 Security regression tests should cover:
 
 - callers cannot pass or override the internal API key,
+- production profile cannot be started with development bearer enabled,
 - forwarded identity headers are ignored unless explicitly enabled in the correct
   component,
 - denied hosted calls are audited.
@@ -212,5 +441,7 @@ Deployment checks should include:
 - DPoP-bound access tokens are the preferred remote-agent credential.
 - Bearer-token hosted MCP is allowed only through explicit development or test
   configuration.
+- Production hosted MCP uses the `HostedProduction` profile and never accepts
+  bearer tokens.
 - Multi-user attribution is based on token claims in the first implementation; no
   separate interactive user login flow is added in this epic.

@@ -105,59 +105,78 @@ Swagger UI is available at `/swagger` when running in Development mode.
 
 ## MCP server
 
-`Backend.Mcp` exposes the administrative API as an MCP server named `idm-demo-mcp`. The default transport is stdio for local agent workflows. Hosted HTTP transport is opt-in for remote agent clients and calls `Backend.Api` using the configured internal administrative API key.
+`Backend.Mcp` exposes the administrative API as an MCP server named `idm-demo-mcp`. The default profile is `LocalStdio` for local agent workflows. Hosted HTTP profiles call `Backend.Api` using the configured internal administrative API key.
 
 Start the API first:
 
 ```bash
 AdminApi__ApiKey=changeme-development-key \
 AuthorizationServer__Issuer=http://localhost:5000 \
+AuthorizationServer__Audience=idm-demo-mcp \
+AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
 AuthorizationServer__EnableForwardedClientCertificate=true \
 ConnectionStrings__Default="Data Source=idm-demo.db" \
 dotnet run --project src/Backend.Api --urls http://localhost:5000
 ```
 
-Run the MCP server with a configured IdM API instance:
+Run the local stdio MCP profile with a configured IdM API instance:
 
 ```bash
 IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
 IdmApiInstances__local__ApiKey=changeme-development-key \
+Mcp__Profile=LocalStdio \
 Mcp__DefaultInstance=local \
-Mcp__Transport=Stdio \
 Mcp__ReadOnly=false \
 dotnet run --project src/Backend.Mcp
 ```
 
 Set `Mcp__ReadOnly=true` to block mutating and destructive tools. Destructive tools also require `confirm: true`.
 
-Run the hosted MCP transport:
+Run the local hosted development profile:
 
 ```bash
 IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
 IdmApiInstances__local__ApiKey=changeme-development-key \
+AuthorizationServer__Issuer=http://localhost:5000 \
+AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
+Mcp__Profile=LocalHostedDevelopment \
 Mcp__DefaultInstance=local \
-Mcp__Transport=Http \
 Mcp__ReadOnly=false \
-Mcp__Hosted__RequireDpop=true \
-Mcp__Hosted__AllowBearerTokensForDevelopment=false \
 Mcp__Hosted__Audience=idm-demo-mcp \
 dotnet run --project src/Backend.Mcp --urls http://localhost:5100
 ```
 
-With `Backend.Api` running on `http://localhost:5000` and hosted `Backend.Mcp`
-running on `http://localhost:5100`, run the hosted transport demo:
+Run the hosted production profile:
 
 ```bash
-bash scripts/demo-hosted-mcp.sh
+IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
+IdmApiInstances__local__ApiKey=changeme-development-key \
+AuthorizationServer__Issuer=http://localhost:5000 \
+AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
+Mcp__Profile=HostedProduction \
+Mcp__DefaultInstance=local \
+Mcp__Hosted__Audience=idm-demo-mcp \
+dotnet run --project src/Backend.Mcp --urls http://localhost:5100
 ```
 
-Environment overrides:
+Profile demo scripts:
+
+```bash
+bash scripts/demo-mcp-local-stdio.sh
+bash scripts/demo-mcp-local-hosted-development.sh
+bash scripts/demo-mcp-hosted-production.sh
+```
+
+`scripts/demo-hosted-mcp.sh` remains as a compatibility wrapper for the local hosted development demo.
+
+Environment overrides for hosted demo scripts:
 
 ```bash
 API_BASE_URL=http://localhost:5000 \
 MCP_BASE_URL=http://localhost:5100 \
 API_KEY=changeme-development-key \
-bash scripts/demo-hosted-mcp.sh --verbose
+MCP_AUDIENCE=idm-demo-mcp \
+bash scripts/demo-mcp-local-hosted-development.sh --verbose
 ```
 
 Hosted MCP endpoints:

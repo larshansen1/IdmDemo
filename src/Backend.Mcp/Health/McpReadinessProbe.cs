@@ -8,7 +8,7 @@ public sealed class McpReadinessProbe : IMcpReadinessProbe
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IdmApiInstancesOptions _instances;
-    private readonly McpRuntimeOptions _runtimeOptions;
+    private readonly McpEffectiveRuntimeSettings _runtimeSettings;
 
     public McpReadinessProbe(
         IHttpClientFactory httpClientFactory,
@@ -21,7 +21,7 @@ public sealed class McpReadinessProbe : IMcpReadinessProbe
 
         this._httpClientFactory = httpClientFactory;
         this._instances = instances.Value;
-        this._runtimeOptions = runtimeOptions.Value;
+        this._runtimeSettings = McpRuntimeProfileResolver.Resolve(runtimeOptions.Value);
     }
 
     public async Task<McpReadinessReport> CheckAsync(CancellationToken cancellationToken)
@@ -34,34 +34,54 @@ public sealed class McpReadinessProbe : IMcpReadinessProbe
 
         return new McpReadinessReport(
             errors.Count == 0 ? "Healthy" : "Unhealthy",
-            this._runtimeOptions.Transport.ToString(),
+            this._runtimeSettings.Profile.ToString(),
+            this._runtimeSettings.Transport.ToString(),
+            this._runtimeSettings.RequiresCallerAuthentication,
+            this._runtimeSettings.RequireDpop,
+            this._runtimeSettings.AllowBearerTokensForDevelopment,
+            this._runtimeSettings.Audience,
+            this._runtimeSettings.ReadOnly,
             checks,
             errors);
     }
 
     private void ValidateHostedAuthConfiguration(List<string> checks, List<string> errors)
     {
-        var hosted = this._runtimeOptions.Hosted;
-        if (string.IsNullOrWhiteSpace(hosted.Audience))
+        if (string.IsNullOrWhiteSpace(this._runtimeSettings.Audience))
         {
             errors.Add("Mcp:Hosted:Audience is required.");
         }
         else
         {
-            checks.Add("Hosted MCP audience is configured.");
+            checks.Add($"MCP audience is configured for '{this._runtimeSettings.Audience}'.");
         }
 
-        if (!hosted.RequireDpop && !hosted.AllowBearerTokensForDevelopment)
+        checks.Add($"MCP profile '{this._runtimeSettings.Profile}' resolves transport '{this._runtimeSettings.Transport}'.");
+
+        if (!this._runtimeSettings.RequiresCallerAuthentication)
         {
-            errors.Add("Hosted MCP must require DPoP or explicitly allow bearer tokens for development.");
+            checks.Add("Hosted MCP caller authentication is not required for the selected profile.");
         }
-        else if (hosted.RequireDpop)
+        else if (this._runtimeSettings.RequireDpop)
         {
             checks.Add("Hosted MCP is configured to require DPoP-bound access tokens.");
         }
-        else
+        else if (this._runtimeSettings.AllowBearerTokensForDevelopment)
         {
             checks.Add("Hosted MCP bearer tokens are enabled for development.");
+        }
+        else
+        {
+            errors.Add("Hosted MCP must require DPoP or explicitly allow bearer tokens for development.");
+        }
+
+        if (this._runtimeSettings.ReadOnly)
+        {
+            checks.Add("MCP read-only mode is enabled.");
+        }
+        else
+        {
+            checks.Add("MCP mutating tools are enabled subject to tool policy.");
         }
     }
 

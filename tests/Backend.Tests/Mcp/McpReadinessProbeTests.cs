@@ -17,6 +17,7 @@ public sealed class McpReadinessProbeTests
         var report = await probe.CheckAsync(CancellationToken.None);
 
         Assert.Equal("Healthy", report.Status);
+        Assert.Equal(nameof(McpProfile.HostedProduction), report.Profile);
         Assert.Contains(report.Checks, check => check.Contains("local", StringComparison.Ordinal));
         Assert.Empty(report.Errors);
     }
@@ -41,39 +42,12 @@ public sealed class McpReadinessProbeTests
     }
 
     [Fact]
-    public async Task CheckAsync_InvalidHostedAuthConfiguration_ReturnsUnhealthy()
+    public async Task CheckAsync_HostedProductionReportsEffectiveAuthPosture()
     {
         var runtime = new McpRuntimeOptions
         {
+            Profile = McpProfile.HostedProduction,
             Transport = McpTransport.Http,
-            Hosted = new McpHostedOptions
-            {
-                RequireDpop = false,
-                AllowBearerTokensForDevelopment = false,
-                Audience = "idm-demo-mcp",
-            },
-        };
-        using var factory = new StubHttpClientFactory(_ => new HttpResponseMessage(HttpStatusCode.OK));
-        var probe = CreateProbe(factory, runtime: runtime);
-
-        var report = await probe.CheckAsync(CancellationToken.None);
-
-        Assert.Equal("Unhealthy", report.Status);
-        Assert.Contains(report.Errors, error => error.Contains("require DPoP", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task CheckAsync_DevelopmentBearerTokensAllowed_ReturnsHealthy()
-    {
-        var runtime = new McpRuntimeOptions
-        {
-            Transport = McpTransport.Http,
-            Hosted = new McpHostedOptions
-            {
-                RequireDpop = false,
-                AllowBearerTokensForDevelopment = true,
-                Audience = "idm-demo-mcp",
-            },
         };
         using var factory = new StubHttpClientFactory(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var probe = CreateProbe(factory, runtime: runtime);
@@ -81,6 +55,31 @@ public sealed class McpReadinessProbeTests
         var report = await probe.CheckAsync(CancellationToken.None);
 
         Assert.Equal("Healthy", report.Status);
+        Assert.Equal(nameof(McpProfile.HostedProduction), report.Profile);
+        Assert.Equal(nameof(McpTransport.Http), report.Transport);
+        Assert.True(report.RequiresCallerAuthentication);
+        Assert.True(report.RequireDpop);
+        Assert.False(report.AllowBearerTokensForDevelopment);
+        Assert.True(report.ReadOnly);
+        Assert.Contains(report.Checks, check => check.Contains("require DPoP", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CheckAsync_DevelopmentBearerTokensAllowed_ReturnsHealthy()
+    {
+        var runtime = new McpRuntimeOptions
+        {
+            Profile = McpProfile.LocalHostedDevelopment,
+            Transport = McpTransport.Http,
+        };
+        using var factory = new StubHttpClientFactory(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var probe = CreateProbe(factory, runtime: runtime);
+
+        var report = await probe.CheckAsync(CancellationToken.None);
+
+        Assert.Equal("Healthy", report.Status);
+        Assert.Equal(nameof(McpProfile.LocalHostedDevelopment), report.Profile);
+        Assert.True(report.AllowBearerTokensForDevelopment);
         Assert.Contains(
             report.Checks,
             check => check.Contains("bearer tokens are enabled for development", StringComparison.Ordinal));
@@ -91,10 +90,10 @@ public sealed class McpReadinessProbeTests
     {
         var runtime = new McpRuntimeOptions
         {
+            Profile = McpProfile.HostedProduction,
             Transport = McpTransport.Http,
             Hosted = new McpHostedOptions
             {
-                RequireDpop = true,
                 Audience = string.Empty,
             },
         };
@@ -188,7 +187,7 @@ public sealed class McpReadinessProbeTests
         return new McpReadinessProbe(
             httpClientFactory,
             Options.Create(instances ?? CreateInstances("changeme-development-key")),
-            Options.Create(runtime ?? new McpRuntimeOptions { Transport = McpTransport.Http }));
+            Options.Create(runtime ?? new McpRuntimeOptions { Profile = McpProfile.HostedProduction }));
     }
 
     private static IdmApiInstancesOptions CreateInstances(string? apiKey)

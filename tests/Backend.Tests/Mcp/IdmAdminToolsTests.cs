@@ -6,6 +6,7 @@ using Backend.Application.Models.Scim;
 using Backend.Mcp;
 using Backend.Mcp.Api;
 using Backend.Mcp.Tools;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -352,7 +353,10 @@ public sealed class IdmAdminToolsTests
 
     private static IdmAdminTools CreateTools(IIdmApiClient apiClient)
     {
-        var guard = new McpMutationGuard(Options.Create(new McpRuntimeOptions()));
+        var guard = new McpMutationGuard(
+            Options.Create(new McpRuntimeOptions()),
+            new McpToolPolicyProvider(),
+            new HttpContextAccessor());
         return new IdmAdminTools(apiClient, guard, NullLogger<IdmAdminTools>.Instance);
     }
 }
