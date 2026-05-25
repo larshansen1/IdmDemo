@@ -9,5 +9,7 @@ public sealed record McpReadinessReport(
     bool AllowBearerTokensForDevelopment,
     string Audience,
     bool ReadOnly,
+    McpRawReadinessSettings Raw,
+    McpEffectiveReadinessSettings Effective,
     IReadOnlyList<string> Checks,
     IReadOnlyList<string> Errors);

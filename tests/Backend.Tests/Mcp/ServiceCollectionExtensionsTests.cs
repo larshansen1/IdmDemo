@@ -3,9 +3,12 @@ using Backend.Application.Services;
 using Backend.Domain.Services;
 using Backend.Mcp;
 using Backend.Mcp.Api;
+using Backend.Mcp.Audit;
 using Backend.Mcp.Health;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -30,6 +33,9 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.NotNull(provider.GetRequiredService<IIdmApiInstanceResolver>());
         Assert.NotNull(provider.GetRequiredService<IMcpToolPolicyProvider>());
         Assert.NotNull(provider.GetRequiredService<IMcpMutationGuard>());
+        Assert.NotNull(provider.GetRequiredService<McpToolAuditContextFactory>());
+        Assert.NotNull(provider.GetRequiredService<McpToolCallFilter>());
+        Assert.NotNull(provider.GetRequiredService<IMcpToolAuditLogger>());
         Assert.NotNull(provider.GetRequiredService<IMcpReadinessProbe>());
         Assert.NotNull(provider.GetRequiredService<IJwtSigningKeyStore>());
         Assert.NotNull(provider.GetRequiredService<IDpopReplayCache>());
@@ -89,10 +95,60 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.Equal(["ES256", "PS256"], options.DpopSupportedAlgorithms);
     }
 
-    private static ServiceProvider CreateProvider(IConfiguration configuration)
+    [Fact]
+    public void AddIdmMcp_UsesHostEnvironmentForProfileValidation()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["urls"] = "http://0.0.0.0:5100",
+                ["Mcp:Profile"] = nameof(McpProfile.LocalHostedDevelopment),
+                ["Mcp:DefaultInstance"] = "remote",
+                ["Mcp:Hosted:Audience"] = "dev-audience",
+                ["IdmApiInstances:remote:BaseUrl"] = "https://idm.example",
+                ["IdmApiInstances:remote:ApiKey"] = "secret",
+            })
+            .Build();
+        using var provider = CreateProvider(configuration, new TestHostEnvironment("Production"));
+
+        var exception = Assert.Throws<OptionsValidationException>(() =>
+            provider.GetRequiredService<IOptions<McpRuntimeOptions>>().Value);
+
+        Assert.Contains(
+            exception.Failures,
+            failure => failure.Contains("localhost binding", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AddIdmMcp_AllowsLocalHostedDevelopmentPublicBindingInDevelopmentEnvironment()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["urls"] = "http://0.0.0.0:5100",
+                ["Mcp:Profile"] = nameof(McpProfile.LocalHostedDevelopment),
+                ["Mcp:DefaultInstance"] = "remote",
+                ["Mcp:Hosted:Audience"] = "dev-audience",
+                ["IdmApiInstances:remote:BaseUrl"] = "https://idm.example",
+                ["IdmApiInstances:remote:ApiKey"] = "secret",
+            })
+            .Build();
+        using var provider = CreateProvider(configuration, new TestHostEnvironment(Environments.Development));
+
+        var runtimeOptions = provider.GetRequiredService<IOptions<McpRuntimeOptions>>().Value;
+
+        Assert.Equal(McpProfile.LocalHostedDevelopment, runtimeOptions.Profile);
+    }
+
+    private static ServiceProvider CreateProvider(IConfiguration configuration, IHostEnvironment? environment = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton(configuration);
+        if (environment is not null)
+        {
+            services.AddSingleton(environment);
+        }
+
         services.AddIdmMcp(configuration);
         return services.BuildServiceProvider(validateScopes: true);
     }
@@ -109,5 +165,21 @@ public sealed class ServiceCollectionExtensionsTests
                 ["IdmApiInstances:remote:ApiKey"] = "secret",
             })
             .Build();
+    }
+
+    private sealed class TestHostEnvironment : IHostEnvironment
+    {
+        public TestHostEnvironment(string environmentName)
+        {
+            this.EnvironmentName = environmentName;
+        }
+
+        public string EnvironmentName { get; set; }
+
+        public string ApplicationName { get; set; } = "Backend.Tests";
+
+        public string ContentRootPath { get; set; } = Directory.GetCurrentDirectory();
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

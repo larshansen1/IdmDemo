@@ -169,6 +169,16 @@ bash scripts/demo-mcp-hosted-production.sh
 
 `scripts/demo-hosted-mcp.sh` remains as a compatibility wrapper for the local hosted development demo.
 
+Profile security posture:
+
+| Profile | Transport | Caller token | DPoP | Bearer tokens | Default read-only |
+| --- | --- | --- | --- | --- | --- |
+| `LocalStdio` | stdio | Not required | Not used | Not used | `false` |
+| `LocalHostedDevelopment` | HTTP on localhost, or development/test only | Required | Accepted | Allowed for development/testing | `false` |
+| `HostedProduction` | HTTP behind a trusted reverse proxy | Required | Required | Rejected | `true` |
+
+`LocalHostedDevelopment` allows non-local HTTP bindings only when the host environment is `Development`, `Test`, or `Testing`, or when `Mcp__Hosted__AllowNonLocalDevelopmentBinding=true` is set deliberately for development/test scenarios.
+
 Environment overrides for hosted demo scripts:
 
 ```bash
@@ -187,7 +197,18 @@ GET  /health/live
 GET  /health/ready
 ```
 
-`/health/ready` validates hosted auth configuration and checks each configured IdM API instance for reachability. In production, put `Backend.Mcp` behind a reverse proxy or ingress that owns TLS termination and edge controls. Keep `Backend.Api` and `Backend.Mcp` private behind that proxy; strip and recreate forwarded headers at the trusted proxy boundary only. The configured IdM API key is an internal MCP-to-API credential and must not be accepted from or exposed to hosted MCP callers.
+`/health/ready` validates hosted auth configuration and checks each configured IdM API instance for reachability. The readiness response includes both raw MCP configuration values and the resolved effective profile posture so operators can see which values were supplied and which values the runtime is enforcing.
+
+Production endpoint boundary:
+
+| Component | Endpoint class | Exposure | Authentication |
+| --- | --- | --- | --- |
+| `Backend.Mcp` | `/mcp` | Public resource behind trusted reverse proxy | IdmDemo-issued MCP access token with `aud` equal to `Mcp:Hosted:Audience`; `HostedProduction` requires DPoP |
+| `Backend.Mcp` | `/health/live`, `/health/ready` | Operational endpoint, deployment-controlled | Protected by infrastructure policy when exposed |
+| `Backend.Api` | discovery and token issuance | Exposed only as needed for OAuth clients | Client certificate authentication for token issuance; optional DPoP proof binds issued tokens |
+| `Backend.Api` | SCIM, certificate, role, scope, and access-management administration | Private/internal only | Internal `X-Api-Key` while the administrative API-key boundary remains in place |
+
+MCP tokens and API administrative access are separate resource boundaries in this phase. MCP callers present tokens for the MCP audience; hosted MCP then calls private `Backend.Api` with the configured internal administrative API key. Public production traffic should reach only the hosted MCP resource and any explicitly exposed OAuth discovery/token endpoints, not API administrative routes. Strip and recreate forwarded headers at the trusted proxy boundary only. The configured IdM API key is an internal MCP-to-API credential and must not be accepted from or exposed to hosted MCP callers.
 
 ### MCP tools
 

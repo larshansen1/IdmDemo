@@ -168,6 +168,7 @@ PY
 
 create_dpop_proof() {
     local method="$1" uri="$2" key_path="$3"
+    local access_token="${4:-}"
     local modulus_hex exponent_dec jwk_n jwk_e header payload signing_input signature
 
     modulus_hex=$(openssl rsa -in "$key_path" -noout -modulus 2>/dev/null | cut -d= -f2)
@@ -201,8 +202,9 @@ header = {
 print(base64.urlsafe_b64encode(json.dumps(header, separators=(",", ":")).encode()).decode().rstrip("="))
 PY
 )
-    payload=$(python3 - "$method" "$uri" <<'PY'
+    payload=$(python3 - "$method" "$uri" "$access_token" <<'PY'
 import base64
+import hashlib
 import json
 import sys
 import time
@@ -214,6 +216,10 @@ payload = {
     "jti": str(uuid.uuid4()),
     "iat": int(time.time()),
 }
+if sys.argv[3]:
+    payload["ath"] = base64.urlsafe_b64encode(
+        hashlib.sha256(sys.argv[3].encode("ascii")).digest()
+    ).decode().rstrip("=")
 print(base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("="))
 PY
 )
@@ -374,7 +380,7 @@ mcp_post_with_auth() {
 
     if [ "$scheme" = "DPoP" ]; then
         local proof
-        proof=$(create_dpop_proof POST "$MCP/mcp" "$WORKDIR/dpop.key")
+        proof=$(create_dpop_proof POST "$MCP/mcp" "$WORKDIR/dpop.key" "$token")
         auth_args=(-H "Authorization: DPoP $token" -H "DPoP: $proof")
     else
         auth_args=(-H "Authorization: Bearer $token")

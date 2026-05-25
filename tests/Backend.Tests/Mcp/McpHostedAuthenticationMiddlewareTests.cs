@@ -212,6 +212,8 @@ public sealed class McpHostedAuthenticationMiddlewareTests
 
         Assert.True(nextCalled);
         Assert.True(context.User.Identity?.IsAuthenticated);
+        Assert.Empty(context.User.FindAll("X-Api-Key"));
+        Assert.Empty(context.User.FindAll("x-api-key"));
         await tokenValidator.Received(1).ValidateAsync("token", Arg.Any<CancellationToken>());
     }
 

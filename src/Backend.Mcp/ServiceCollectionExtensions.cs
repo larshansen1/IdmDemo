@@ -3,6 +3,7 @@ using Backend.Application.Services;
 using Backend.Domain.Services;
 using Backend.Infrastructure.Signing;
 using Backend.Mcp.Api;
+using Backend.Mcp.Audit;
 using Backend.Mcp.Health;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,6 +49,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IIdmApiInstanceResolver, IdmApiInstanceResolver>();
         services.AddSingleton<IMcpToolPolicyProvider, McpToolPolicyProvider>();
         services.AddSingleton<IMcpMutationGuard, McpMutationGuard>();
+        services.AddSingleton<McpToolAuditContextFactory>();
+        services.AddSingleton<McpToolCallFilter>();
+        services.AddSingleton<IMcpToolAuditLogger, McpToolAuditLogger>();
         services.AddSingleton<IMcpReadinessProbe, McpReadinessProbe>();
         services.AddSingleton<IValidateOptions<McpRuntimeOptions>, McpRuntimeOptionsValidator>();
 

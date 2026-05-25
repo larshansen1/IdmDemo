@@ -61,6 +61,12 @@ public sealed class McpReadinessProbeTests
         Assert.True(report.RequireDpop);
         Assert.False(report.AllowBearerTokensForDevelopment);
         Assert.True(report.ReadOnly);
+        Assert.Equal(nameof(McpProfile.HostedProduction), report.Effective.Profile);
+        Assert.Equal(nameof(McpTransport.Http), report.Effective.Transport);
+        Assert.True(report.Effective.RequiresCallerAuthentication);
+        Assert.True(report.Effective.RequireDpop);
+        Assert.False(report.Effective.AllowBearerTokensForDevelopment);
+        Assert.True(report.Effective.ReadOnly);
         Assert.Contains(report.Checks, check => check.Contains("require DPoP", StringComparison.Ordinal));
     }
 
@@ -80,9 +86,50 @@ public sealed class McpReadinessProbeTests
         Assert.Equal("Healthy", report.Status);
         Assert.Equal(nameof(McpProfile.LocalHostedDevelopment), report.Profile);
         Assert.True(report.AllowBearerTokensForDevelopment);
+        Assert.Equal(nameof(McpProfile.LocalHostedDevelopment), report.Raw.Profile);
+        Assert.Null(report.Raw.RequireDpop);
+        Assert.Null(report.Raw.AllowBearerTokensForDevelopment);
+        Assert.Equal(nameof(McpProfile.LocalHostedDevelopment), report.Effective.Profile);
+        Assert.True(report.Effective.RequiresCallerAuthentication);
+        Assert.False(report.Effective.RequireDpop);
+        Assert.True(report.Effective.AllowBearerTokensForDevelopment);
         Assert.Contains(
             report.Checks,
             check => check.Contains("bearer tokens are enabled for development", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CheckAsync_LegacyHttpDevelopmentBearerReportsRawAndEffectivePosture()
+    {
+        var runtime = new McpRuntimeOptions
+        {
+            Transport = McpTransport.Http,
+            ReadOnly = true,
+            Hosted = new McpHostedOptions
+            {
+                AllowBearerTokensForDevelopment = true,
+                Audience = "legacy-mcp",
+            },
+        };
+        using var factory = new StubHttpClientFactory(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var probe = CreateProbe(factory, runtime: runtime);
+
+        var report = await probe.CheckAsync(CancellationToken.None);
+
+        Assert.Equal("Healthy", report.Status);
+        Assert.Null(report.Raw.Profile);
+        Assert.Equal(nameof(McpTransport.Http), report.Raw.Transport);
+        Assert.Null(report.Raw.RequireDpop);
+        Assert.True(report.Raw.AllowBearerTokensForDevelopment);
+        Assert.Equal("legacy-mcp", report.Raw.Audience);
+        Assert.True(report.Raw.ReadOnly);
+        Assert.Equal(nameof(McpProfile.LocalHostedDevelopment), report.Effective.Profile);
+        Assert.Equal(nameof(McpTransport.Http), report.Effective.Transport);
+        Assert.True(report.Effective.RequiresCallerAuthentication);
+        Assert.False(report.Effective.RequireDpop);
+        Assert.True(report.Effective.AllowBearerTokensForDevelopment);
+        Assert.Equal("legacy-mcp", report.Effective.Audience);
+        Assert.True(report.Effective.ReadOnly);
     }
 
     [Fact]

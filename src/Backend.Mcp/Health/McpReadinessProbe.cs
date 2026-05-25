@@ -8,6 +8,7 @@ public sealed class McpReadinessProbe : IMcpReadinessProbe
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IdmApiInstancesOptions _instances;
+    private readonly McpRuntimeOptions _runtimeOptions;
     private readonly McpEffectiveRuntimeSettings _runtimeSettings;
 
     public McpReadinessProbe(
@@ -21,7 +22,8 @@ public sealed class McpReadinessProbe : IMcpReadinessProbe
 
         this._httpClientFactory = httpClientFactory;
         this._instances = instances.Value;
-        this._runtimeSettings = McpRuntimeProfileResolver.Resolve(runtimeOptions.Value);
+        this._runtimeOptions = runtimeOptions.Value;
+        this._runtimeSettings = McpRuntimeProfileResolver.Resolve(this._runtimeOptions);
     }
 
     public async Task<McpReadinessReport> CheckAsync(CancellationToken cancellationToken)
@@ -41,8 +43,33 @@ public sealed class McpReadinessProbe : IMcpReadinessProbe
             this._runtimeSettings.AllowBearerTokensForDevelopment,
             this._runtimeSettings.Audience,
             this._runtimeSettings.ReadOnly,
+            this.CreateRawSettings(),
+            this.CreateEffectiveSettings(),
             checks,
             errors);
+    }
+
+    private McpRawReadinessSettings CreateRawSettings()
+    {
+        return new McpRawReadinessSettings(
+            this._runtimeOptions.Profile?.ToString(),
+            this._runtimeOptions.Transport?.ToString(),
+            this._runtimeOptions.Hosted.RequireDpop,
+            this._runtimeOptions.Hosted.AllowBearerTokensForDevelopment,
+            this._runtimeOptions.Hosted.Audience,
+            this._runtimeOptions.ReadOnly);
+    }
+
+    private McpEffectiveReadinessSettings CreateEffectiveSettings()
+    {
+        return new McpEffectiveReadinessSettings(
+            this._runtimeSettings.Profile.ToString(),
+            this._runtimeSettings.Transport.ToString(),
+            this._runtimeSettings.RequiresCallerAuthentication,
+            this._runtimeSettings.RequireDpop,
+            this._runtimeSettings.AllowBearerTokensForDevelopment,
+            this._runtimeSettings.Audience,
+            this._runtimeSettings.ReadOnly);
     }
 
     private void ValidateHostedAuthConfiguration(List<string> checks, List<string> errors)

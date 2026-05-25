@@ -322,12 +322,12 @@ Phase 3 implementation status:
 | Done | Tool policy consumes effective posture | MCP tool authorization uses resolved transport and read-only posture. |
 | Done | Readiness reports effective posture | Readiness includes profile, transport, caller-auth requirement, DPoP requirement, bearer allowance, audience, and read-only posture. |
 | Done | Profile-oriented demo scripts | Demo scripts are split by `LocalStdio`, `LocalHostedDevelopment`, and `HostedProduction`; `demo-hosted-mcp.sh` remains a compatibility wrapper. |
-| Partial | Profile validation | Contradictory transport, DPoP, and bearer overrides are rejected; local-hosted public-binding checks exist but still need DI wiring verified against runtime configuration/environment. |
-| Partial | Documentation | README shows profile-based startup and demos; it still needs explicit API/MCP audience separation and development/test escape-hatch guidance. |
-| Partial | Local hosted DPoP coverage | `LocalHostedDevelopment` bearer demo exists; DPoP acceptance in that profile still needs script or integration-test coverage. |
-| Missing | Readiness raw-vs-effective distinction | Readiness reports effective posture but does not separately expose raw input configuration. |
-| Missing | Complete profile security test matrix | Positive/negative coverage is incomplete for hosted `/mcp` exposure, bearer rejection outside dev/test, wrong audience, missing DPoP proof, missing scopes, and API-key boundary regressions. |
-| Missing | API boundary profile documentation | Production docs still need an explicit matrix showing hosted MCP as the public resource and `Backend.Api` administrative routes as private/internal-key protected. |
+| Done | Profile validation | Contradictory transport, DPoP, and bearer overrides are rejected; local-hosted public-binding checks are covered through DI with runtime configuration/environment. |
+| Done | Documentation | README shows profile-based startup, demos, API/MCP audience separation, endpoint boundaries, and development/test escape-hatch guidance. |
+| Done | Local hosted DPoP coverage | `LocalHostedDevelopment` demo now exercises both bearer and DPoP-bound hosted MCP calls. |
+| Done | Readiness raw-vs-effective distinction | Readiness reports raw input configuration separately from resolved effective runtime posture. |
+| Partial | Complete profile security test matrix | Unit coverage now includes validation wiring, DPoP/bearer auth posture, missing DPoP proof, missing scopes, and caller API-key header isolation; remaining gap is a full hosted `/mcp` integration matrix across every profile. |
+| Done | API boundary profile documentation | README includes an explicit matrix showing hosted MCP as the public resource and `Backend.Api` administrative routes as private/internal-key protected. |
 
 ### Phase 4: Audit and Destructive Action Safety
 
@@ -337,6 +337,15 @@ Phase 3 implementation status:
 - Require destructive scope and explicit confirmation for deletes and certificate
   revocation.
 - Log denied attempts with security-relevant context.
+
+Phase 4 implementation status:
+
+| Status | Item | Notes |
+|---|---|---|
+| Done | MCP tool audit events | Hosted MCP tool calls emit `McpToolInvoked`, `McpToolDenied`, `McpToolFailed`, and `McpToolSucceeded` audit events through a centralized call filter. |
+| Done | Destructive confirmation preservation | Existing `confirm: true` requirements remain enforced by the mutation guard before tool execution. |
+| Done | Destructive scope enforcement | Destructive delete and certificate revocation tools continue to require the configured destructive/certificate scopes. |
+| Done | Denied-attempt security context | Denied tool calls are logged with caller, client, scopes, instance/resource identifiers, policy flags, confirmation state, profile, and transport context. |
 
 ### Phase 5: Higher-Level Workflow Tools
 

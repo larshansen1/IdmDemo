@@ -1,4 +1,5 @@
 using Backend.Mcp;
+using Backend.Mcp.Audit;
 using Backend.Mcp.Health;
 using Backend.Mcp.Tools;
 using Microsoft.AspNetCore.Builder;
@@ -33,9 +34,8 @@ if (transport == McpTransport.Http)
             filters.AddCallToolFilter(next => (context, cancellationToken) =>
             {
                 var services = context.Services ?? context.Server.Services!;
-                var guard = services.GetRequiredService<IMcpMutationGuard>();
-                guard.EnsureToolAllowed(context.Params?.Name ?? string.Empty, context.Params?.Arguments);
-                return next(context, cancellationToken);
+                var filter = services.GetRequiredService<McpToolCallFilter>();
+                return filter.InvokeAsync(next, context, cancellationToken);
             });
         })
         .WithTools<IdmAdminTools>();
