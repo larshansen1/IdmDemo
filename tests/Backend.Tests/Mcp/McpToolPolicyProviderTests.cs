@@ -43,6 +43,18 @@ public sealed class McpToolPolicyProviderTests
     }
 
     [Fact]
+    public void GetPolicy_CertificateWorkflowTool_ReturnsCertificateScopePolicy()
+    {
+        var provider = new McpToolPolicyProvider();
+
+        var policy = provider.GetPolicy("idm_rotate_machine_client_certificate");
+
+        Assert.False(policy.ReadOnly);
+        Assert.False(policy.Destructive);
+        Assert.True(policy.RequiresCertificateScope);
+    }
+
+    [Fact]
     public void GetPolicy_UnregisteredTool_ThrowsToolException()
     {
         var provider = new McpToolPolicyProvider();

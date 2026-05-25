@@ -387,6 +387,194 @@ public sealed class IdmAdminTools
             activeCertificates.Select(certificate => certificate.ExpiresAt).Order().FirstOrDefault());
     }
 
+    [McpServerTool(Name = "idm_rotate_machine_client_certificate", ReadOnly = false, Destructive = false)]
+    [Description("Issue a replacement machine-client certificate from a CSR and optionally revoke a previous certificate.")]
+    public async Task<RotateMachineClientCertificateResult> RotateMachineClientCertificateAsync(
+        string clientId,
+        string certificateSigningRequestPem,
+        string? displayName = null,
+        int? validityDays = null,
+        Guid? revokeCertificateId = null,
+        bool confirmRevoke = false,
+        string? reason = null,
+        string? instance = null,
+        CancellationToken cancellationToken = default)
+    {
+        this._mutationGuard.EnsureMutationAllowed();
+        RequireText(clientId, nameof(clientId));
+        RequireText(certificateSigningRequestPem, nameof(certificateSigningRequestPem));
+
+        if (revokeCertificateId is not null)
+        {
+            this._mutationGuard.EnsureToolAllowed(
+                "idm_revoke_client_certificate",
+                CreateConfirmArguments(confirmRevoke));
+        }
+
+        var steps = new List<WorkflowStepResult>();
+        var clientRecordId = await this.ResolveClientRecordIdAsync(instance, clientId, cancellationToken).ConfigureAwait(false);
+        steps.Add(new WorkflowStepResult("resolve_client", _succeeded, null, $"Resolved client record {clientRecordId:D}."));
+
+        var certificates = await this._apiClient.ListCertificatesAsync(instance, clientRecordId, cancellationToken).ConfigureAwait(false);
+        var activeCertificates = certificates.Value.Resources
+            .Where(certificate => string.Equals(certificate.Status, "Active", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(certificate => certificate.ExpiresAt)
+            .ToArray();
+        steps.Add(new WorkflowStepResult("inspect_existing_certificates", _succeeded, certificates.CorrelationId, null));
+
+        var issued = await this._apiClient.CreateCertificateAsync(
+            instance,
+            clientRecordId,
+            new CreateCertificateRequest
+            {
+                Mode = "csr",
+                CertificateSigningRequestPem = certificateSigningRequestPem,
+                DisplayName = displayName,
+                ValidityDays = validityDays,
+            },
+            cancellationToken).ConfigureAwait(false);
+        steps.Add(new WorkflowStepResult("issue_certificate", _succeeded, issued.CorrelationId, null));
+
+        CertificateResponse? revokedCertificate = null;
+        if (revokeCertificateId is not null)
+        {
+            var revoked = await this._apiClient
+                .RevokeCertificateAsync(
+                    instance,
+                    clientRecordId,
+                    revokeCertificateId.Value,
+                    new RevokeCertificateRequest { Reason = reason },
+                    cancellationToken)
+                .ConfigureAwait(false);
+            revokedCertificate = revoked.Value;
+            steps.Add(new WorkflowStepResult("revoke_previous_certificate", _succeeded, revoked.CorrelationId, null));
+        }
+        else
+        {
+            steps.Add(new WorkflowStepResult("revoke_previous_certificate", "skipped", null, "No previous certificate id was supplied."));
+        }
+
+        return new RotateMachineClientCertificateResult(
+            issued.Instance,
+            _succeeded,
+            clientId,
+            clientRecordId,
+            activeCertificates.Length,
+            issued.Value,
+            revokedCertificate,
+            steps,
+            [
+                "Deploy the returned certificate with the private key that generated the CSR.",
+                "After the new credential is confirmed in use, revoke any superseded certificate.",
+            ]);
+    }
+
+    [McpServerTool(Name = "idm_prepare_dpop_client_credential_instructions", ReadOnly = true)]
+    [Description("Prepare DPoP-bound client credential setup instructions for a machine client.")]
+    public async Task<DpopClientCredentialInstructionsResult> PrepareDpopClientCredentialInstructionsAsync(
+        string clientId,
+        string? mcpAudience = null,
+        string? instance = null,
+        CancellationToken cancellationToken = default)
+    {
+        RequireText(clientId, nameof(clientId));
+
+        var discovery = await this._apiClient.GetDiscoveryAsync(instance, cancellationToken).ConfigureAwait(false);
+        var audience = string.IsNullOrWhiteSpace(mcpAudience) ? "idm-demo-mcp" : mcpAudience.Trim();
+
+        return new DpopClientCredentialInstructionsResult(
+            discovery.Instance,
+            discovery.CorrelationId,
+            clientId,
+            audience,
+            discovery.Value,
+            [
+                new WorkflowStepResult("inspect_authorization_server", _succeeded, discovery.CorrelationId, null),
+                new WorkflowStepResult("prepare_client_material", "manual", null, "Generate the DPoP key and certificate private key outside IdmDemo."),
+                new WorkflowStepResult("request_token", "manual", null, "Send a fresh DPoP proof when requesting the access token."),
+                new WorkflowStepResult("call_hosted_mcp", "manual", null, "Send the DPoP-bound access token and a fresh DPoP proof on each hosted MCP request."),
+            ],
+            [
+                "Generate an asymmetric DPoP key pair in the caller-controlled environment.",
+                "Generate a separate private key and CSR for the machine-client certificate.",
+                "Use idm_issue_client_certificate_from_csr or idm_rotate_machine_client_certificate to obtain the public certificate.",
+                $"Request a client_credentials access token from {discovery.Value.TokenEndpoint} with audience '{audience}' and a DPoP proof signed by the DPoP key.",
+                "Call hosted MCP with Authorization: DPoP <access token> and a new DPoP proof bound to the MCP request method and URI.",
+            ]);
+    }
+
+    [McpServerTool(Name = "idm_preflight_machine_client_deployment", ReadOnly = true)]
+    [Description("Preflight a machine client before deployment by checking activation, scopes, roles, and active certificates.")]
+    public async Task<MachineClientDeploymentPreflightResult> PreflightMachineClientDeploymentAsync(
+        string clientId,
+        string[]? requiredRoles = null,
+        string[]? requiredScopes = null,
+        int minimumCertificateValidityDays = 7,
+        string? instance = null,
+        CancellationToken cancellationToken = default)
+    {
+        RequireText(clientId, nameof(clientId));
+
+        var clientRecordId = await this.ResolveClientRecordIdAsync(instance, clientId, cancellationToken).ConfigureAwait(false);
+        var client = await this._apiClient.GetClientAsync(instance, clientRecordId, cancellationToken).ConfigureAwait(false);
+        var certificates = await this._apiClient.ListCertificatesAsync(instance, clientRecordId, cancellationToken).ConfigureAwait(false);
+        var activeCertificates = certificates.Value.Resources
+            .Where(certificate => string.Equals(certificate.Status, "Active", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(certificate => certificate.ExpiresAt)
+            .ToArray();
+
+        var blockingIssues = new List<string>();
+        var warnings = new List<string>();
+        var suggestedNextActions = new List<string>();
+
+        if (!client.Value.Active)
+        {
+            blockingIssues.Add("Machine client is inactive.");
+            suggestedNextActions.Add("Activate the machine client before deployment.");
+        }
+
+        AddMissingAssignments("role", requiredRoles, client.Value.AssignedRoles, blockingIssues, suggestedNextActions);
+        AddMissingAssignments("scope", requiredScopes, client.Value.AssignedScopes, blockingIssues, suggestedNextActions);
+
+        if (activeCertificates.Length == 0)
+        {
+            blockingIssues.Add("Machine client has no active certificate.");
+            suggestedNextActions.Add("Issue or register an active client certificate before deployment.");
+        }
+        else
+        {
+            var minimumExpiry = DateTimeOffset.UtcNow.AddDays(Math.Max(0, minimumCertificateValidityDays));
+            var expiringSoon = activeCertificates
+                .Where(certificate => certificate.ExpiresAt <= minimumExpiry)
+                .ToArray();
+            if (expiringSoon.Length > 0)
+            {
+                warnings.Add($"One or more active certificates expire within {minimumCertificateValidityDays} days.");
+                suggestedNextActions.Add("Rotate the machine-client certificate before deployment if the deployment window depends on this credential.");
+            }
+        }
+
+        if (blockingIssues.Count == 0 && warnings.Count == 0)
+        {
+            suggestedNextActions.Add("Proceed with deployment using an active certificate and DPoP-bound token request.");
+        }
+
+        return new MachineClientDeploymentPreflightResult(
+            client.Instance,
+            client.CorrelationId,
+            client.Value.ClientId,
+            clientRecordId,
+            blockingIssues.Count == 0,
+            client.Value,
+            certificates.Value.TotalResults,
+            activeCertificates.Length,
+            activeCertificates.Select(certificate => certificate.ExpiresAt).Order().FirstOrDefault(),
+            activeCertificates,
+            blockingIssues,
+            warnings,
+            suggestedNextActions);
+    }
+
     [McpServerTool(Name = "idm_onboard_machine_client", ReadOnly = false, Destructive = false)]
     [Description("Create or update a machine client, assign roles/scopes, and optionally register or issue an initial certificate.")]
     public async Task<OnboardMachineClientResult> OnboardMachineClientAsync(
@@ -488,6 +676,43 @@ public sealed class IdmAdminTools
                 },
             ],
         };
+    }
+
+    private static Dictionary<string, JsonElement> CreateConfirmArguments(bool confirm)
+    {
+        return new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+        {
+            ["confirm"] = JsonSerializer.SerializeToElement(confirm),
+        };
+    }
+
+    private static void AddMissingAssignments(
+        string assignmentName,
+        string[]? required,
+        IReadOnlyList<string> assigned,
+        List<string> blockingIssues,
+        List<string> suggestedNextActions)
+    {
+        if (required is not { Length: > 0 })
+        {
+            return;
+        }
+
+        var assignedSet = assigned.ToHashSet(StringComparer.Ordinal);
+        var missing = required
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Where(value => !assignedSet.Contains(value))
+            .ToArray();
+
+        foreach (var value in missing)
+        {
+            blockingIssues.Add($"Machine client is missing required {assignmentName} '{value}'.");
+        }
+
+        if (missing.Length > 0)
+        {
+            suggestedNextActions.Add($"Assign the missing {assignmentName}s before deployment.");
+        }
     }
 
     private static CallToolResult CreateApiErrorToolResult(IdmApiException exception)

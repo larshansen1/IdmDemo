@@ -12,6 +12,7 @@ public sealed class McpToolPolicyProvider : IMcpToolPolicyProvider
         "idm_issue_client_certificate_from_csr",
         "idm_revoke_client_certificate",
         "idm_onboard_machine_client",
+        "idm_rotate_machine_client_certificate",
     };
 
     private readonly Dictionary<string, McpToolPolicy> _policies;

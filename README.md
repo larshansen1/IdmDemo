@@ -20,14 +20,17 @@ Epic 5 (complete) — Global role and scope catalog management, user role assign
 
 Epic 6 (complete) — MCP administrative interface over stdio for user, machine-client, role, scope, certificate, discovery, and JWKS operations.
 
+Epic 7 (in progress) — Hosted MCP profiles for local and production agent workflows, DPoP-bound hosted access, MCP tool authorization, audit events, and higher-level machine-client credential workflow tools.
+
 See [product.md](product.md) for the full roadmap.
 
 ---
 
 ## API
 
-All endpoints require `X-Api-Key: <key>` (default: `changeme-development-key`).  
-All requests and responses use `Content-Type: application/scim+json`.
+Administrative SCIM, certificate, role, scope, and access-management endpoints require `X-Api-Key: <key>` (default: `changeme-development-key`) and use `Content-Type: application/scim+json`.
+
+Authorization-server discovery and JWKS are public. Token requests use OAuth-style form encoding and OAuth-style error responses.
 
 ### Users
 
@@ -86,8 +89,6 @@ POST   /scim/v2/Clients/{clientRecordId}/Certificates/{certificateId}/Revoke
 `clientRecordId` is the internal GUID returned as `id` by `/scim/v2/Clients`. It is not the external OAuth `clientId` string.
 
 ### Authorization Server
-
-Discovery and JWKS are public. Token requests use OAuth-style form encoding and OAuth-style error responses.
 
 ```
 GET  /.well-known/openid-configuration
@@ -164,6 +165,7 @@ Profile demo scripts:
 ```bash
 bash scripts/demo-mcp-local-stdio.sh
 bash scripts/demo-mcp-local-hosted-development.sh
+bash scripts/demo-mcp-phase-5-workflows.sh
 bash scripts/demo-mcp-hosted-production.sh
 ```
 
@@ -178,6 +180,15 @@ Profile security posture:
 | `HostedProduction` | HTTP behind a trusted reverse proxy | Required | Required | Rejected | `true` |
 
 `LocalHostedDevelopment` allows non-local HTTP bindings only when the host environment is `Development`, `Test`, or `Testing`, or when `Mcp__Hosted__AllowNonLocalDevelopmentBinding=true` is set deliberately for development/test scenarios.
+
+Hosted MCP tool authorization uses scopes from the caller's access token:
+
+| Scope | Allows |
+| --- | --- |
+| `idm.mcp.read` | Read-only tools |
+| `idm.mcp.write` | Non-destructive mutating tools |
+| `idm.mcp.destructive` | Destructive tools when `confirm: true` is supplied |
+| `idm.mcp.certificates` | Certificate issuance, registration, revocation, onboarding with certificates, and certificate rotation workflows |
 
 Environment overrides for hosted demo scripts:
 
@@ -229,7 +240,6 @@ idm_get_machine_client
 idm_list_machine_clients
 idm_update_machine_client
 idm_delete_machine_client
-idm_onboard_machine_client
 ```
 
 Role and scope tools:
@@ -257,12 +267,24 @@ idm_get_authorization_server_metadata
 idm_get_jwks
 ```
 
+Workflow tools:
+
+```
+idm_onboard_machine_client
+idm_rotate_machine_client_certificate
+idm_prepare_dpop_client_credential_instructions
+idm_preflight_machine_client_deployment
+```
+
 `idm_list_machine_clients` includes certificate collection summaries and active certificate metadata for each returned client. The legacy single-certificate fields on the underlying SCIM client resource are retained only for compatibility and do not describe the certificate collection.
 
 Certificate MCP tools accept either the internal client record GUID or the external machine-client `clientId` such as `order-agent`. The MCP layer resolves external client IDs before calling the certificate API.
 
 `idm_issue_client_certificate_from_csr` accepts optional `validityDays` from 1 to 90 and returns the signed public certificate as top-level `certificatePem`.
 `idm_onboard_machine_client` can create or update a machine client, assign roles/scopes, and optionally register or issue an initial certificate from either an external certificate PEM or a CSR. CSR-issued certificates currently accept `certificateValidityDays` from 1 to 90.
+`idm_rotate_machine_client_certificate` issues a replacement certificate from a CSR and can revoke a previous certificate when `confirmRevoke: true` is supplied.
+`idm_prepare_dpop_client_credential_instructions` returns discovery-backed setup instructions for DPoP-bound client credentials.
+`idm_preflight_machine_client_deployment` checks activation, required roles/scopes, active certificates, certificate expiry, and deployment readiness.
 
 ---
 
@@ -292,6 +314,10 @@ bash scripts/demo-api.sh --verbose  # show full request and response for each ca
 bash scripts/demo-certificates.sh # run certificate lifecycle scenarios
 bash scripts/demo-auth.sh         # run OAuth mTLS and DPoP token scenarios
 bash scripts/demo-access-management.sh # run role/scope catalog and assignment scenarios
+bash scripts/demo-mcp-local-stdio.sh # run local stdio MCP smoke scenarios
+bash scripts/demo-mcp-local-hosted-development.sh # run local hosted MCP bearer and DPoP scenarios
+bash scripts/demo-mcp-phase-5-workflows.sh # run hosted MCP workflow scenarios
+bash scripts/demo-mcp-hosted-production.sh # run hosted production DPoP scenarios
 ```
 
 Environment overrides:
@@ -301,6 +327,7 @@ API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-api.sh
 API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-certificates.sh
 API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-auth.sh
 API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-access-management.sh
+API_BASE_URL=https://your-api MCP_BASE_URL=https://your-mcp API_KEY=your-key MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-local-hosted-development.sh
 ```
 
 ---
@@ -323,6 +350,11 @@ API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-access-managem
 │   ├── demo-certificates.sh    # certificate lifecycle demo
 │   ├── demo-auth.sh            # OAuth mTLS and DPoP token demo
 │   ├── demo-access-management.sh # role/scope catalog and assignment demo
+│   ├── demo-mcp-local-stdio.sh # local stdio MCP demo
+│   ├── demo-mcp-local-hosted-development.sh # local hosted MCP demo
+│   ├── demo-mcp-hosted-production.sh # hosted production MCP demo
+│   ├── demo-mcp-phase-5-workflows.sh # MCP workflow demo
+│   ├── lib/mcp-demo-helpers.sh # shared hosted MCP demo helpers
 │   ├── check-complexity.sh
 │   ├── check-duplicates.sh
 │   ├── check-secrets.sh
@@ -407,8 +439,18 @@ Hooks run automatically on `git commit`:
     "RequireDpop": false,
     "DpopProofLifetimeSeconds": 300,
     "DpopReplayCacheSeconds": 300,
-    "DpopSupportedAlgorithms": [ "ES256", "RS256" ]
-  },
+    "DpopSupportedAlgorithms": [ "ES256", "RS256" ],
+    "SigningKeyPath": "signing-key.json",
+    "ForwardedClientCertificateHeader": "X-Client-Cert",
+    "EnableForwardedClientCertificate": false
+  }
+}
+```
+
+`Backend.Mcp` is configured through environment variables or configuration providers:
+
+```json
+{
   "IdmApiInstances": {
     "local": {
       "BaseUrl": "http://127.0.0.1:5000",
@@ -416,8 +458,12 @@ Hooks run automatically on `git commit`:
     }
   },
   "Mcp": {
+    "Profile": "LocalStdio",
     "DefaultInstance": "local",
-    "ReadOnly": false
+    "ReadOnly": false,
+    "Hosted": {
+      "Audience": "idm-demo-mcp"
+    }
   }
 }
 ```

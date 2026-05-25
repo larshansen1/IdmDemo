@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using Backend.Application.Models.Auth;
 using Backend.Application.Models.Certificates;
 using Backend.Application.Models.Clients;
 using Backend.Application.Models.Scim;
@@ -300,6 +301,125 @@ public sealed class IdmAdminToolsTests
     }
 
     [Fact]
+    public async Task RotateMachineClientCertificateAsync_IssuesCertificateAndRevokesPreviousCertificate()
+    {
+        var apiClient = Substitute.For<IIdmApiClient>();
+        var clientRecordId = Guid.NewGuid();
+        var previousCertificateId = Guid.NewGuid();
+        apiClient.ListClientsAsync(null, "clientId eq \"order-agent\"", Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<ScimListResponse<ClientResponse>>(
+                "local",
+                "list-client-correlation",
+                new ScimListResponse<ClientResponse>
+                {
+                    TotalResults = 1,
+                    ItemsPerPage = 1,
+                    Resources =
+                    [
+                        new ClientResponse
+                        {
+                            Id = clientRecordId.ToString(),
+                            ClientId = "order-agent",
+                            Active = true,
+                        },
+                    ],
+                }));
+        apiClient.ListCertificatesAsync(null, clientRecordId, Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<ScimListResponse<CertificateResponse>>(
+                "local",
+                "list-cert-correlation",
+                new ScimListResponse<CertificateResponse>
+                {
+                    TotalResults = 1,
+                    ItemsPerPage = 1,
+                    Resources =
+                    [
+                        new CertificateResponse
+                        {
+                            Id = previousCertificateId.ToString(),
+                            Status = "Active",
+                            ExpiresAt = DateTimeOffset.UtcNow.AddDays(10),
+                        },
+                    ],
+                }));
+        apiClient.CreateCertificateAsync(null, clientRecordId, Arg.Any<CreateCertificateRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<CertificateResponse>(
+                "local",
+                "issue-correlation",
+                new CertificateResponse
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    ClientId = "order-agent",
+                    CertificatePem = "certificate-pem",
+                    Status = "Active",
+                }));
+        apiClient.RevokeCertificateAsync(null, clientRecordId, previousCertificateId, Arg.Any<RevokeCertificateRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<CertificateResponse>(
+                "local",
+                "revoke-correlation",
+                new CertificateResponse
+                {
+                    Id = previousCertificateId.ToString(),
+                    ClientId = "order-agent",
+                    Status = "Revoked",
+                }));
+        var tools = CreateTools(apiClient);
+
+        var result = await tools.RotateMachineClientCertificateAsync(
+            "order-agent",
+            "csr-pem",
+            revokeCertificateId: previousCertificateId,
+            confirmRevoke: true,
+            reason: "rotation");
+
+        Assert.Equal("succeeded", result.Status);
+        Assert.Equal(1, result.ExistingActiveCertificateCount);
+        Assert.Equal("certificate-pem", result.IssuedCertificate!.CertificatePem);
+        Assert.Equal("Revoked", result.RevokedCertificate!.Status);
+        Assert.Contains(result.Steps, step => step.Name == "issue_certificate" && step.Status == "succeeded");
+        Assert.Contains(result.Steps, step => step.Name == "revoke_previous_certificate" && step.Status == "succeeded");
+    }
+
+    [Fact]
+    public async Task RotateMachineClientCertificateAsync_RevokeWithoutConfirmation_ThrowsBeforeApiCall()
+    {
+        var apiClient = Substitute.For<IIdmApiClient>();
+        var tools = CreateTools(apiClient);
+
+        await Assert.ThrowsAsync<McpToolException>(() =>
+            tools.RotateMachineClientCertificateAsync(
+                "order-agent",
+                "csr-pem",
+                revokeCertificateId: Guid.NewGuid()));
+
+        await apiClient.DidNotReceiveWithAnyArgs()
+            .CreateCertificateAsync(default, default, default!, default);
+    }
+
+    [Fact]
+    public async Task PrepareDpopClientCredentialInstructionsAsync_ReturnsDiscoveryBackedInstructions()
+    {
+        var apiClient = Substitute.For<IIdmApiClient>();
+        apiClient.GetDiscoveryAsync(null, Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<DiscoveryResponse>(
+                "local",
+                "discovery-correlation",
+                new DiscoveryResponse
+                {
+                    Issuer = "https://issuer.example",
+                    TokenEndpoint = new Uri("https://issuer.example/connect/token"),
+                }));
+        var tools = CreateTools(apiClient);
+
+        var result = await tools.PrepareDpopClientCredentialInstructionsAsync("order-agent", "idm-demo-mcp");
+
+        Assert.Equal("order-agent", result.ClientId);
+        Assert.Equal("idm-demo-mcp", result.McpAudience);
+        Assert.Equal("https://issuer.example", result.AuthorizationServer.Issuer);
+        Assert.Contains(result.Instructions, instruction => instruction.Contains("Authorization: DPoP", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task InspectClientCredentialStatusAsync_ExternalClientId_ResolvesRecordId()
     {
         var apiClient = Substitute.For<IIdmApiClient>();
@@ -349,6 +469,53 @@ public sealed class IdmAdminToolsTests
         Assert.Equal(1, result.CertificateCount);
         Assert.Equal(1, result.ActiveCertificateCount);
         Assert.Equal(expiresAt, result.NextCertificateExpiry);
+    }
+
+    [Fact]
+    public async Task PreflightMachineClientDeploymentAsync_ReturnsBlockingIssuesForMissingScopeAndInactiveClient()
+    {
+        var apiClient = Substitute.For<IIdmApiClient>();
+        var clientRecordId = Guid.NewGuid();
+        var client = new ClientResponse
+        {
+            Id = clientRecordId.ToString(),
+            ClientId = "order-agent",
+            Active = false,
+            AssignedRoles = ["service"],
+            AssignedScopes = ["orders.read"],
+        };
+        apiClient.ListClientsAsync(null, "clientId eq \"order-agent\"", Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<ScimListResponse<ClientResponse>>(
+                "local",
+                "list-client-correlation",
+                new ScimListResponse<ClientResponse>
+                {
+                    TotalResults = 1,
+                    ItemsPerPage = 1,
+                    Resources = [client],
+                }));
+        apiClient.GetClientAsync(null, clientRecordId, Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<ClientResponse>("local", "get-client-correlation", client));
+        apiClient.ListCertificatesAsync(null, clientRecordId, Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<ScimListResponse<CertificateResponse>>(
+                "local",
+                "list-cert-correlation",
+                new ScimListResponse<CertificateResponse>
+                {
+                    TotalResults = 0,
+                    ItemsPerPage = 0,
+                }));
+        var tools = CreateTools(apiClient);
+
+        var result = await tools.PreflightMachineClientDeploymentAsync(
+            "order-agent",
+            requiredRoles: ["service"],
+            requiredScopes: ["orders.read", "orders.write"]);
+
+        Assert.False(result.Ready);
+        Assert.Contains("Machine client is inactive.", result.BlockingIssues);
+        Assert.Contains("Machine client has no active certificate.", result.BlockingIssues);
+        Assert.Contains("Machine client is missing required scope 'orders.write'.", result.BlockingIssues);
     }
 
     private static IdmAdminTools CreateTools(IIdmApiClient apiClient)

@@ -42,6 +42,9 @@ public sealed class IdmToolRegistrationTests
             "idm_get_authorization_server_metadata",
             "idm_get_jwks",
             "idm_inspect_client_credential_status",
+            "idm_rotate_machine_client_certificate",
+            "idm_prepare_dpop_client_credential_instructions",
+            "idm_preflight_machine_client_deployment",
             "idm_onboard_machine_client",
         ]));
     }

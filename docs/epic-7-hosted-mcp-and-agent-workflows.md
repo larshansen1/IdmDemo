@@ -359,6 +359,16 @@ Phase 4 implementation status:
   - preflight machine-client credential status before deployment.
 - Return structured step results that are easy for agents and tests to inspect.
 
+Phase 5 implementation status:
+
+| Status | Item | Notes |
+|---|---|---|
+| Done | Certificate rotation workflow | `idm_rotate_machine_client_certificate` resolves the machine client, inspects active certificates, issues a replacement certificate from a CSR, and optionally revokes a previous certificate after destructive confirmation. |
+| Done | DPoP credential instructions workflow | `idm_prepare_dpop_client_credential_instructions` returns discovery-backed, structured instructions for caller-owned DPoP key, certificate CSR, token request, and hosted MCP call setup. |
+| Done | Onboarding workflow | Existing `idm_onboard_machine_client` remains the workflow for creating or updating a machine client with roles, scopes, and optional CSR/external certificate. |
+| Done | Deployment preflight workflow | `idm_preflight_machine_client_deployment` reports readiness, blocking issues, warnings, active certificates, assignment checks, and suggested next actions. |
+| Done | Structured workflow results | New workflow result records expose step status, correlation ids, blocking issues, warnings, and next actions for agents and tests. |
+
 ### Phase 6: Deployment and Operations Hardening
 
 - Add container and reverse-proxy examples for `Backend.Api` and hosted
