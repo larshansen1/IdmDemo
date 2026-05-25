@@ -47,6 +47,8 @@ public sealed class ClientCertificateReader : IClientCertificateReader
             return null;
         }
 
+        value = Uri.UnescapeDataString(value);
+
         if (value.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal))
         {
             return X509Certificate2.CreateFromPem(value);

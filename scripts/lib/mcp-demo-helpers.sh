@@ -2,6 +2,7 @@
 
 PROTOCOL_VERSION="${PROTOCOL_VERSION:-2025-06-18}"
 API="${API_BASE_URL:-http://localhost:5000}"
+AUTH="${AUTH_BASE_URL:-$API}"
 MCP="${MCP_BASE_URL:-http://localhost:5100}"
 KEY="${API_KEY:-changeme-development-key}"
 MCP_AUDIENCE="${MCP_AUDIENCE:-idm-demo-mcp}"
@@ -333,7 +334,7 @@ cleanup_mcp_demo_client() {
 issue_bearer_token() {
     local client_id="$1" scope="$2"
 
-    do_request "Issue bearer token" POST "$API/connect/token" \
+    do_request "Issue bearer token" POST "$AUTH/connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -H "X-Client-Cert: $CLIENT_CERT_DER_BASE64" \
         --data-urlencode "grant_type=client_credentials" \
@@ -355,10 +356,10 @@ issue_dpop_token() {
         -pkeyopt rsa_keygen_bits:2048 \
         -out "$WORKDIR/dpop.key" >/dev/null 2>&1
 
-    DPOP_TOKEN_PROOF=$(create_dpop_proof POST "$API/connect/token" "$WORKDIR/dpop.key")
+    DPOP_TOKEN_PROOF=$(create_dpop_proof POST "$AUTH/connect/token" "$WORKDIR/dpop.key")
     DPOP_JKT=$(jwk_thumbprint "$WORKDIR/dpop.key")
 
-    do_request "Issue DPoP token" POST "$API/connect/token" \
+    do_request "Issue DPoP token" POST "$AUTH/connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -H "X-Client-Cert: $CLIENT_CERT_DER_BASE64" \
         -H "DPoP: $DPOP_TOKEN_PROOF" \

@@ -328,7 +328,11 @@ API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-certificates.s
 API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-auth.sh
 API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-access-management.sh
 API_BASE_URL=https://your-api MCP_BASE_URL=https://your-mcp API_KEY=your-key MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-local-hosted-development.sh
+API_BASE_URL=http://127.0.0.1:5000 AUTH_BASE_URL=https://auth.idp.madmetal.org MCP_BASE_URL=https://mcp.idp.madmetal.org MCP_HEALTH_BASE_URL=http://127.0.0.1:5100 API_KEY=your-key MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-hosted-production.sh
 ```
+
+Production Docker Compose and NGINX deployment notes are in
+[`docs/production-hetzner-docker-compose.md`](docs/production-hetzner-docker-compose.md).
 
 ---
 

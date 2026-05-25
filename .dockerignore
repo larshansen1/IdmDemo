@@ -1,0 +1,15 @@
+.git
+.github
+.vs
+.vscode
+**/bin
+**/obj
+coverage
+TestResults
+*.db
+*.db-shm
+*.db-wal
+*.trx
+signing-key.json
+certificate-authority.json
+deploy/production/.env

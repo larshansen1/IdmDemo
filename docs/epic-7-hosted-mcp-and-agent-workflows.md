@@ -373,6 +373,26 @@ Phase 5 implementation status:
 
 - Add container and reverse-proxy examples for `Backend.Api` and hosted
   `Backend.Mcp`.
+- Run `Backend.Api` and `Backend.Mcp` as separate Docker Compose services so the
+  authorization-server and MCP resource-server boundaries are operationally
+  visible.
+- Use separate public hostnames for the two external surfaces:
+  - `auth.idp.madmetal.org` for authorization-server discovery and token
+    issuance,
+  - `mcp.idp.madmetal.org` for hosted MCP and protected resource metadata.
+- Terminate public TLS at the existing NGINX reverse proxy with Let's Encrypt
+  certificates.
+- Keep `Backend.Api` administrative management routes private. Public NGINX
+  routing may expose only the authorization-server discovery/JWKS/token
+  endpoints needed by OAuth clients; SCIM, certificate management, role/scope,
+  user, and machine-client administration remain reachable only from the private
+  Docker network or trusted operator access.
+- Keep `Backend.Mcp` publicly reachable only through NGINX and only for hosted
+  MCP, readiness as explicitly permitted by infrastructure policy, and OAuth
+  protected resource metadata.
+- Support pipeline-driven image updates with immutable image tags and
+  server-side Compose deployment that can pull, restart, and health-check the two
+  services independently.
 - Default `HostedProduction` MCP to read-only unless explicitly configured
   otherwise.
 - Supply secrets through environment variables or a deployment config provider.
@@ -380,6 +400,161 @@ Phase 5 implementation status:
   scopes, profile selection, secret rotation, health checks, and audit review.
 - Keep SQLite supported for the learning version without blocking a later PostgreSQL
   migration.
+
+Phase 6 recommended production topology:
+
+```text
+Internet
+   |
+   | HTTPS, Let's Encrypt
+   v
+NGINX on Hetzner
+   |-------------------------------|
+   | auth.idp.madmetal.org         | mcp.idp.madmetal.org
+   | public auth endpoints only    | hosted MCP resource
+   v                               v
+Backend.Api container          Backend.Mcp container
+   ^                               |
+   | internal Docker network       | internal X-Api-Key credential
+   |-------------------------------|
+```
+
+Phase 6 work items:
+
+1. Add production Compose documentation.
+   - Define separate `backend-api` and `backend-mcp` services.
+   - Bind service ports to loopback or the private Docker network, not directly
+     to public interfaces.
+   - Persist the database and signing key material through named volumes or
+     explicitly managed host paths.
+   - Pass `AuthorizationServer:Issuer=https://auth.idp.madmetal.org`.
+   - Pass `Mcp:Profile=HostedProduction`.
+   - Pass `Mcp:Hosted:Audience` as the MCP resource audience.
+   - Configure `IdmApiInstances:local:BaseUrl` to the private API service URL
+     inside Compose.
+2. Add NGINX deployment documentation.
+   - Route `auth.idp.madmetal.org` only to the public authorization endpoints.
+   - Route `mcp.idp.madmetal.org/mcp` to `Backend.Mcp`.
+   - Route `mcp.idp.madmetal.org/.well-known/oauth-protected-resource` and, if
+     path-specific metadata is implemented, the endpoint-specific protected
+     resource metadata path to `Backend.Mcp`.
+   - Strip inbound forwarded headers and recreate `X-Forwarded-Proto`,
+     `X-Forwarded-Host`, and `X-Forwarded-For` at the trusted proxy boundary.
+   - Do not route `Backend.Api` administrative paths from the public internet.
+3. Add a remote production smoke path.
+   - Reuse `scripts/demo-mcp-hosted-production.sh` against the two public
+     hostnames.
+   - Verify `GET https://mcp.idp.madmetal.org/health/ready` reports
+     `HostedProduction`, DPoP required, bearer development disabled, and private
+     API reachability.
+   - Verify token issuance from `https://auth.idp.madmetal.org/connect/token`.
+   - Verify hosted MCP rejects bearer scheme and accepts a DPoP-bound access
+     token with the MCP audience.
+4. Add pipeline deployment notes.
+   - Build and push versioned images for `Backend.Api` and `Backend.Mcp`.
+   - Deploy by updating Compose image tags, pulling images, restarting only the
+     changed services, and checking health before pruning old images.
+   - Keep database migrations explicit and ordered before replacing API
+     instances that require the migrated schema.
+5. Add operational checks.
+   - Confirm public DNS resolves only through NGINX.
+   - Confirm direct container ports are not reachable externally.
+   - Confirm management endpoints return no public route.
+   - Confirm logs and audit events do not include access tokens, DPoP proofs,
+     API keys, certificate private keys, or CSRs with private-key material.
+
+Phase 6 exit criteria:
+
+- `auth.idp.madmetal.org` serves only the required public authorization-server
+  surface over HTTPS.
+- `mcp.idp.madmetal.org` serves hosted MCP over HTTPS with
+  `HostedProduction`, DPoP required, and bearer development disabled.
+- `Backend.Api` administrative management routes are not externally exposed.
+- The remote hosted-production demo script passes against the Hetzner deployment.
+- Updated container images can be deployed through the pipeline without manual
+  shell edits on the server.
+- The NGINX and Compose documentation is sufficient to rebuild the deployment on
+  a fresh host.
+
+Phase 6 implementation status:
+
+| Status | Item | Notes |
+|---|---|---|
+| Done | Container build definitions | Separate Dockerfiles build `Backend.Api` and `Backend.Mcp` as ASP.NET runtime images. |
+| Done | Production Compose example | `deploy/production/compose.yml` runs separate API and MCP services, shares signing keys, persists SQLite data, and binds app ports to loopback for NGINX. |
+| Done | Environment example | `deploy/production/env.example` captures image tags, MCP audience, read-only posture, and the internal admin API key. |
+| Done | NGINX example | `deploy/production/nginx-idmdemo.conf` splits `auth.idp.madmetal.org` and `mcp.idp.madmetal.org`, exposes only public auth/MCP routes, strips inbound sensitive headers, and recreates the forwarded client certificate header at the proxy boundary. |
+| Done | Forwarded certificate compatibility | `Backend.Api` accepts NGINX escaped PEM client certificates in addition to existing base64 DER forwarded certificates. |
+| Done | Production runbook | `docs/production-hetzner-docker-compose.md` documents build, server layout, Let's Encrypt/NGINX, smoke testing, pipeline deployment, and security checks. |
+| Done | Remote smoke script inputs | `demo-mcp-hosted-production.sh` can separate private admin API setup, public authorization-server token issuance, public MCP calls, and private readiness checks. |
+| Pending | Live Hetzner verification | Run the production smoke script against the actual server after DNS, certificates, images, and Compose deployment are in place. |
+
+### Phase 7: Interactive MCP Client Compatibility
+
+Open WebUI and similar browser-based MCP clients introduce a different problem
+than the Phase 6 machine-client smoke path. They expect the MCP server to behave
+like an OAuth-protected resource for an interactive user, discover the
+authorization server, perform an authorization-code flow with PKCE, and obtain a
+token for the MCP resource. That should be a separate phase so the production
+machine-client deployment can be proven first.
+
+Phase 7 should align with the current MCP HTTP authorization model:
+
+- `Backend.Mcp` acts as the OAuth protected resource and exposes protected
+  resource metadata with an `authorization_servers` entry pointing to
+  `https://auth.idp.madmetal.org`.
+- `Backend.Mcp` 401 responses include `WWW-Authenticate` metadata guidance so
+  clients can discover the protected resource metadata document.
+- `Backend.Api` acts as the authorization server and exposes authorization
+  server metadata or OpenID Connect discovery metadata over
+  `https://auth.idp.madmetal.org`.
+- Interactive clients use authorization code plus PKCE, not the existing
+  machine-client mTLS credential flow.
+- Tokens issued for Open WebUI use the MCP resource identifier/audience and are
+  not accepted as API administrative tokens.
+
+Phase 7 work items:
+
+1. Add MCP protected resource metadata.
+   - Serve `/.well-known/oauth-protected-resource` from `Backend.Mcp`.
+   - Include the canonical MCP resource identifier, supported MCP scopes, and
+     `authorization_servers: ["https://auth.idp.madmetal.org"]`.
+   - Ensure 401 and insufficient-scope responses include useful
+     `WWW-Authenticate` challenge metadata.
+2. Add interactive authorization-server support.
+   - Add an authorization endpoint and authorization-code grant with PKCE.
+   - Add exact redirect URI registration and validation.
+   - Add user login/consent or a deliberately constrained first operator-user
+     model.
+   - Include `code_challenge_methods_supported` with `S256` in discovery
+     metadata.
+   - Decide whether to support pre-registered Open WebUI clients first, then
+     dynamic client registration or client ID metadata documents later.
+3. Add user-to-scope authorization policy.
+   - Map interactive users to allowed MCP scopes.
+   - Keep hosted MCP write/destructive/certificate scopes explicit and avoid
+     granting them by default.
+   - Preserve audit attribution with user subject, client id, scopes, tool name,
+     and affected resource.
+4. Validate Open WebUI integration.
+   - Configure Open WebUI against `https://mcp.idp.madmetal.org/mcp`.
+   - Verify metadata discovery, PKCE authorization, token refresh or
+     reauthorization behavior, tool listing, read tool calls, insufficient-scope
+     challenges, and denial audit events.
+   - Keep DPoP for machine clients, but decide whether Open WebUI can support
+     DPoP-bound resource calls before requiring it for interactive users.
+
+Phase 7 exit criteria:
+
+- Open WebUI can discover the MCP protected resource metadata and authorization
+  server metadata without manual token copying.
+- An interactive user can complete authorization-code plus PKCE and obtain an MCP
+  resource token.
+- Open WebUI can list tools and run read-only MCP tools with least-privilege
+  scopes.
+- Insufficient write/destructive scopes fail with actionable OAuth challenge
+  metadata and audited denials.
+- Machine-client DPoP behavior from Phase 6 remains intact.
 
 ## Configuration Additions
 

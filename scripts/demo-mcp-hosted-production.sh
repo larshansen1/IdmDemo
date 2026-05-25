@@ -7,6 +7,9 @@ set -euo pipefail
 # Expected services:
 #   Backend.Api running with AuthorizationServer__Audience=idm-demo-mcp
 #   Backend.Mcp running with Mcp__Profile=HostedProduction
+# Optional environment:
+#   API_BASE_URL private/admin API URL, AUTH_BASE_URL public token URL,
+#   MCP_BASE_URL public MCP URL, MCP_HEALTH_BASE_URL private health URL
 
 VERBOSE=0
 for arg in "$@"; do
@@ -29,13 +32,15 @@ TOOLS_PAYLOAD='{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 CALL_READ_PAYLOAD='{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"idm_list_machine_clients","arguments":{"filter":null,"instance":null}}}'
 
 echo "IdmDemo MCP HostedProduction demo"
-echo "API URL : $API"
-echo "MCP URL : $MCP"
-echo "Profile : HostedProduction"
+echo "Admin API URL : $API"
+echo "Auth URL      : $AUTH"
+echo "MCP URL       : $MCP"
+echo "Health URL    : ${MCP_HEALTH_BASE_URL:-$MCP}"
+echo "Profile       : HostedProduction"
 [ "$VERBOSE" -eq 1 ] && echo "Mode    : verbose"
 
 header "Health and profile readiness"
-do_request "MCP readiness" GET "$MCP/health/ready"
+do_request "MCP readiness" GET "${MCP_HEALTH_BASE_URL:-$MCP}/health/ready"
 check "GET /health/ready -> 200" 200 "$_STATUS" "$_BODY"
 check_contains "Readiness reports HostedProduction" "\"profile\":\"HostedProduction\"" "$_BODY"
 check_contains "Readiness reports DPoP required" "\"requireDpop\":true" "$_BODY"

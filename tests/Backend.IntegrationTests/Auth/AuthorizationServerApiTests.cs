@@ -101,6 +101,28 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
     }
 
     [Fact]
+    public async Task PostToken_EscapedForwardedPemCertificate_ReturnsCertificateBoundJwt()
+    {
+        var clientId = $"nginx-{Guid.NewGuid():N}";
+        using var certificate = CreateCertificate(clientId);
+        await this.CreateClientAsync(clientId, ComputeThumbprintHex(certificate), ["orders.read"], []);
+        using var request = CreateTokenRequest(clientId, "orders.read");
+        request.Headers.Add("X-Client-Cert", Uri.EscapeDataString(certificate.ExportCertificatePem()));
+
+        var response = await this._client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(_jsonOptions);
+        Assert.NotNull(tokenResponse);
+        Assert.Equal("Bearer", tokenResponse.TokenType);
+
+        var payload = ReadJwtPayload(tokenResponse.AccessToken);
+        Assert.Equal(
+            ComputeThumbprintBase64Url(certificate),
+            payload.GetProperty("cnf").GetProperty("x5t#S256").GetString());
+    }
+
+    [Fact]
     public async Task PostToken_ValidDpopProof_ReturnsDpopBoundJwt()
     {
         var clientId = $"dpop-{Guid.NewGuid():N}";

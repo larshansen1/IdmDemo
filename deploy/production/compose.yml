@@ -1,0 +1,53 @@
+services:
+  backend-api:
+    image: ${BACKEND_API_IMAGE:?Set BACKEND_API_IMAGE}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      AdminApi__ApiKey: ${IDM_ADMIN_API_KEY:?Set IDM_ADMIN_API_KEY}
+      ConnectionStrings__Default: Data Source=/data/idm-demo.db
+      AuthorizationServer__Issuer: https://auth.idp.madmetal.org
+      AuthorizationServer__Audience: ${MCP_AUDIENCE:-idm-demo-mcp}
+      AuthorizationServer__SigningKeyPath: /keys/signing-key.json
+      AuthorizationServer__EnableForwardedClientCertificate: "true"
+      AuthorizationServer__ForwardedClientCertificateHeader: X-Client-Cert
+      CertificateAuthority__KeyPath: /keys/certificate-authority.json
+    ports:
+      - "127.0.0.1:5000:8080"
+    volumes:
+      - idmdemo-data:/data
+      - idmdemo-keys:/keys
+    networks:
+      - idmdemo
+
+  backend-mcp:
+    image: ${BACKEND_MCP_IMAGE:?Set BACKEND_MCP_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      - backend-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      AuthorizationServer__Issuer: https://auth.idp.madmetal.org
+      AuthorizationServer__SigningKeyPath: /keys/signing-key.json
+      IdmApiInstances__local__BaseUrl: http://backend-api:8080
+      IdmApiInstances__local__ApiKey: ${IDM_ADMIN_API_KEY:?Set IDM_ADMIN_API_KEY}
+      Mcp__DefaultInstance: local
+      Mcp__Profile: HostedProduction
+      Mcp__Hosted__Audience: ${MCP_AUDIENCE:-idm-demo-mcp}
+      Mcp__ReadOnly: ${MCP_READ_ONLY:-true}
+    ports:
+      - "127.0.0.1:5100:8080"
+    volumes:
+      - idmdemo-keys:/keys:ro
+    networks:
+      - idmdemo
+
+networks:
+  idmdemo:
+    driver: bridge
+
+volumes:
+  idmdemo-data:
+  idmdemo-keys:
