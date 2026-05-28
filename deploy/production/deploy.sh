@@ -9,7 +9,7 @@ fi
 TAG="$1"
 BACKEND_API_IMAGE="${2:-ghcr.io/larshansen1/idmdemo-backend-api:$TAG}"
 BACKEND_MCP_IMAGE="${3:-ghcr.io/larshansen1/idmdemo-backend-mcp:$TAG}"
-DEPLOY_DIR="${IDMDEMO_DEPLOY_DIR:-/opt/idmdemo}"
+DEPLOY_DIR="${IDMDEMO_DEPLOY_DIR:-/home/admin/docker/idmdemo}"
 
 cd "$DEPLOY_DIR"
 

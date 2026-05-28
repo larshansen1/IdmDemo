@@ -81,7 +81,7 @@ jobs:
 
   deploy-production:
     name: Deploy Production
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, workhorse-idmdemo]
     needs: quality
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -95,9 +95,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -114,7 +111,7 @@ jobs:
         with:
           context: .
           file: src/Backend.Api/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
           push: true
           tags: |
             ${{ env.BACKEND_API_IMAGE }}:${{ github.sha }}
@@ -125,21 +122,11 @@ jobs:
         with:
           context: .
           file: src/Backend.Mcp/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
           push: true
           tags: |
             ${{ env.BACKEND_MCP_IMAGE }}:${{ github.sha }}
             ${{ env.BACKEND_MCP_IMAGE }}:main
 
-      - name: Install SSH key
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "${{ secrets.HETZNER_PORT || 22 }}" "${{ secrets.HETZNER_HOST }}" >> ~/.ssh/known_hosts
-
-      - name: Deploy on Hetzner
-        run: |
-          ssh -p "${{ secrets.HETZNER_PORT || 22 }}" \
-            "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" \
-            "/opt/idmdemo/deploy.sh '${{ github.sha }}'"
+      - name: Deploy
+        run: /home/admin/docker/idmdemo/deploy.sh '${{ github.sha }}'
