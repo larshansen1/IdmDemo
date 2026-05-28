@@ -3,6 +3,7 @@ using Backend.Mcp.Audit;
 using Backend.Mcp.Health;
 using Backend.Mcp.Tools;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -40,8 +41,18 @@ if (transport == McpTransport.Http)
         })
         .WithTools<IdmAdminTools>();
 
+    var forwardedHeadersOptions = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto,
+        ForwardLimit = 1,
+        RequireHeaderSymmetry = false,
+    };
+    forwardedHeadersOptions.KnownNetworks.Clear();
+    forwardedHeadersOptions.KnownProxies.Clear();
+
     var app = builder.Build();
     app.MapIdmMcpHealthEndpoints();
+    app.UseForwardedHeaders(forwardedHeadersOptions);
     app.UseMcpHostedAuthentication();
     app.MapMcp("/mcp");
 
