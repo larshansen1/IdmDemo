@@ -128,5 +128,10 @@ jobs:
             ${{ env.BACKEND_MCP_IMAGE }}:${{ github.sha }}
             ${{ env.BACKEND_MCP_IMAGE }}:main
 
+      - name: Update production deployment files
+        run: |
+          install -m 644 deploy/production/compose.yml /home/admin/docker/idmdemo/compose.yml
+          install -m 755 deploy/production/deploy.sh /home/admin/docker/idmdemo/deploy.sh
+
       - name: Deploy
         run: /home/admin/docker/idmdemo/deploy.sh '${{ github.sha }}'

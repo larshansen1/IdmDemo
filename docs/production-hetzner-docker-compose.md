@@ -66,6 +66,11 @@ Compose binds app ports to loopback only:
 
 Do not publish these ports on a public interface. NGINX is the public edge.
 
+The `volume-permissions` service runs before the backends and then exits. It
+repairs ownership on the SQLite data volume and signing-key volume so the
+non-root .NET `app` user can create `/data/idm-demo.db`,
+`/keys/signing-key.json`, and `/keys/certificate-authority.json`.
+
 ## NGINX
 
 Install the config:
@@ -148,11 +153,13 @@ Expected behavior:
 Use immutable image tags. A deployment job should:
 
 1. Build and push both images.
-2. Copy or update `/opt/idmdemo/.env` with the new tags.
-3. Run `docker compose pull`.
+2. Copy or update `/opt/idmdemo/compose.yml`, `/opt/idmdemo/deploy.sh`, and
+   `/opt/idmdemo/.env`.
+3. Run `docker compose pull volume-permissions backend-api backend-mcp`.
 4. Run `docker compose up -d backend-api backend-mcp`.
-5. Run the smoke test.
-6. Prune old images only after the smoke test passes.
+5. Wait for `Backend.Api` discovery and `Backend.Mcp` readiness to succeed.
+6. Run the smoke test.
+7. Prune old images only after the smoke test passes.
 
 The repository CI deploy job expects these GitHub secrets:
 

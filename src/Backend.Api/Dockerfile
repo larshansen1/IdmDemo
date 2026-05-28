@@ -24,6 +24,8 @@ EXPOSE 8080
 
 ENV ASPNETCORE_URLS=http://+:8080
 
+RUN mkdir -p /data /keys && chown -R app:app /data /keys
+
 COPY --from=build /app/publish ./
 
 USER app

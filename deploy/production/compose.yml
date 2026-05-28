@@ -1,7 +1,18 @@
 services:
+  volume-permissions:
+    image: busybox:1.36
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /data /keys && chown -R 1654:1654 /data /keys"]
+    volumes:
+      - idmdemo-data:/data
+      - idmdemo-keys:/keys
+
   backend-api:
     image: ${BACKEND_API_IMAGE:?Set BACKEND_API_IMAGE}
     restart: unless-stopped
+    depends_on:
+      volume-permissions:
+        condition: service_completed_successfully
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
@@ -25,7 +36,10 @@ services:
     image: ${BACKEND_MCP_IMAGE:?Set BACKEND_MCP_IMAGE}
     restart: unless-stopped
     depends_on:
-      - backend-api
+      volume-permissions:
+        condition: service_completed_successfully
+      backend-api:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
