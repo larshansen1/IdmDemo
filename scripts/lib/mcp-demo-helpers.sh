@@ -6,6 +6,7 @@ AUTH="${AUTH_BASE_URL:-$API}"
 MCP="${MCP_BASE_URL:-http://localhost:5100}"
 KEY="${API_KEY:-changeme-development-key}"
 MCP_AUDIENCE="${MCP_AUDIENCE:-idm-demo-mcp}"
+AUTH_DPOP="${AUTH_DPOP_BASE_URL:-$AUTH}"
 
 WORKDIR="${WORKDIR:-$(mktemp -d)}"
 BODY_FILE="$WORKDIR/body.txt"
@@ -333,10 +334,13 @@ cleanup_mcp_demo_client() {
 
 issue_bearer_token() {
     local client_id="$1" scope="$2"
+    local cert_args=()
+
+    token_client_certificate_args cert_args
 
     do_request "Issue bearer token" POST "$AUTH/connect/token" \
+        "${cert_args[@]}" \
         -H "Content-Type: application/x-www-form-urlencoded" \
-        -H "X-Client-Cert: $CLIENT_CERT_DER_BASE64" \
         --data-urlencode "grant_type=client_credentials" \
         --data-urlencode "client_id=$client_id" \
         --data-urlencode "scope=$scope"
@@ -350,18 +354,20 @@ issue_bearer_token() {
 
 issue_dpop_token() {
     local client_id="$1" scope="$2"
+    local cert_args=()
 
     openssl genpkey \
         -algorithm RSA \
         -pkeyopt rsa_keygen_bits:2048 \
         -out "$WORKDIR/dpop.key" >/dev/null 2>&1
 
-    DPOP_TOKEN_PROOF=$(create_dpop_proof POST "$AUTH/connect/token" "$WORKDIR/dpop.key")
+    DPOP_TOKEN_PROOF=$(create_dpop_proof POST "$AUTH_DPOP/connect/token" "$WORKDIR/dpop.key")
     DPOP_JKT=$(jwk_thumbprint "$WORKDIR/dpop.key")
+    token_client_certificate_args cert_args
 
     do_request "Issue DPoP token" POST "$AUTH/connect/token" \
+        "${cert_args[@]}" \
         -H "Content-Type: application/x-www-form-urlencoded" \
-        -H "X-Client-Cert: $CLIENT_CERT_DER_BASE64" \
         -H "DPoP: $DPOP_TOKEN_PROOF" \
         --data-urlencode "grant_type=client_credentials" \
         --data-urlencode "client_id=$client_id" \
@@ -373,6 +379,20 @@ issue_dpop_token() {
     TOKEN_SCOPE=$(echo "$_BODY" | json_field scope)
     TOKEN_AUDIENCE=$(jwt_payload_field "$ACCESS_TOKEN" aud)
     TOKEN_JKT=$(jwt_payload_field "$ACCESS_TOKEN" 'cnf.jkt')
+}
+
+token_client_certificate_args() {
+    local -n args_ref="$1"
+
+    args_ref=()
+    case "$AUTH" in
+        https://*)
+            args_ref+=(--cert "$WORKDIR/client.crt" --key "$WORKDIR/client.key")
+            ;;
+        *)
+            args_ref+=(-H "X-Client-Cert: $CLIENT_CERT_DER_BASE64")
+            ;;
+    esac
 }
 
 mcp_post_with_auth() {

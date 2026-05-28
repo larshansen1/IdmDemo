@@ -136,8 +136,10 @@ scopes and a temporary machine client through administrative API routes. Run the
 script on the server, in CI with private network access, or through an SSH tunnel
 to `127.0.0.1:5000`. `AUTH_BASE_URL` and `MCP_BASE_URL` should use the public
 HTTPS hostnames so token issuance and MCP DPoP proofs are bound to the real
-external URLs. `MCP_HEALTH_BASE_URL` may stay private if readiness is not exposed
-publicly.
+external URLs. For public HTTPS token issuance, the script presents the generated
+client certificate with curl `--cert` and `--key`; it does not rely on a
+caller-supplied `X-Client-Cert` header. `MCP_HEALTH_BASE_URL` may stay private if
+readiness is not exposed publicly.
 
 Expected behavior:
 

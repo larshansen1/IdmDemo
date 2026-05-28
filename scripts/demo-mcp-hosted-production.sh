@@ -9,7 +9,9 @@ set -euo pipefail
 #   Backend.Mcp running with Mcp__Profile=HostedProduction
 # Optional environment:
 #   API_BASE_URL private/admin API URL, AUTH_BASE_URL public token URL,
-#   MCP_BASE_URL public MCP URL, MCP_HEALTH_BASE_URL private health URL
+#   MCP_BASE_URL public MCP URL, MCP_HEALTH_BASE_URL private health URL.
+#   AUTH_DPOP_BASE_URL overrides the DPoP htu base when token POSTs must use a
+#   private URL while proofs must remain bound to the public issuer URL.
 
 VERBOSE=0
 for arg in "$@"; do
@@ -34,6 +36,7 @@ CALL_READ_PAYLOAD='{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name
 echo "IdmDemo MCP HostedProduction demo"
 echo "Admin API URL : $API"
 echo "Auth URL      : $AUTH"
+[ "$AUTH_DPOP" != "$AUTH" ] && echo "Auth DPoP URL : $AUTH_DPOP"
 echo "MCP URL       : $MCP"
 echo "Health URL    : ${MCP_HEALTH_BASE_URL:-$MCP}"
 echo "Profile       : HostedProduction"
