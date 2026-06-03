@@ -41,7 +41,7 @@ fi
 set_env BACKEND_API_IMAGE "$BACKEND_API_IMAGE"
 set_env BACKEND_MCP_IMAGE "$BACKEND_MCP_IMAGE"
 
-compose pull volume-permissions backend-api backend-mcp
+compose pull volume-permissions mcp-cert-gen backend-api backend-mcp
 compose up -d backend-api backend-mcp
 
 wait_for_url() {

@@ -1,6 +1,7 @@
 using Backend.Api.Extensions;
 using Backend.Api.Middleware;
 using Backend.Api.Services;
+using Backend.Api.Startup;
 using Backend.Application.Extensions;
 using Backend.Application.Models.Auth;
 using Backend.Infrastructure.Extensions;
@@ -53,6 +54,7 @@ builder.Services.AddSingleton<IClientCertificateReader, ClientCertificateReader>
 
 builder.Services.AddExceptionHandler<ScimExceptionHandler>();
 builder.Services.AddProblemDetails();
+builder.Services.AddHostedService<ScimAdminSeeder>();
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("Backend.Api"))

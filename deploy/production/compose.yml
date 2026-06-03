@@ -7,16 +7,40 @@ services:
       - idmdemo-data:/data
       - idmdemo-keys:/keys
 
+  mcp-cert-gen:
+    image: alpine:3
+    restart: "no"
+    depends_on:
+      volume-permissions:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - -c
+      - |
+        if [ -f /keys/mcp-client.pem ]; then
+          echo "MCP client certificate already exists, skipping."
+          exit 0
+        fi
+        apk add --no-cache --quiet openssl
+        openssl req -x509 -newkey rsa:2048 \
+          -keyout /tmp/mcp-key.pem \
+          -out /tmp/mcp-cert.pem \
+          -days 3650 -nodes \
+          -subj "/CN=idm-mcp-backend"
+        cat /tmp/mcp-cert.pem /tmp/mcp-key.pem > /keys/mcp-client.pem
+        echo "MCP client certificate generated."
+    volumes:
+      - idmdemo-keys:/keys
+
   backend-api:
     image: ${BACKEND_API_IMAGE:?Set BACKEND_API_IMAGE}
     restart: unless-stopped
     depends_on:
-      volume-permissions:
+      mcp-cert-gen:
         condition: service_completed_successfully
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      AdminApi__ApiKey: ${IDM_ADMIN_API_KEY:?Set IDM_ADMIN_API_KEY}
       ConnectionStrings__Default: Data Source=/data/idm-demo.db
       AuthorizationServer__Issuer: https://auth.idp.madmetal.org
       AuthorizationServer__Audience: ${MCP_AUDIENCE:-idm-demo-mcp}
@@ -24,6 +48,8 @@ services:
       AuthorizationServer__EnableForwardedClientCertificate: "true"
       AuthorizationServer__ForwardedClientCertificateHeader: X-Client-Cert
       CertificateAuthority__KeyPath: /keys/certificate-authority.json
+      ScimAdmin__SeedClientId: ${IDM_MCP_CLIENT_ID:-idm-mcp-backend}
+      ScimAdmin__SeedCertPath: /keys/mcp-client.pem
     ports:
       - "127.0.0.1:5000:8080"
     volumes:
@@ -36,7 +62,7 @@ services:
     image: ${BACKEND_MCP_IMAGE:?Set BACKEND_MCP_IMAGE}
     restart: unless-stopped
     depends_on:
-      volume-permissions:
+      mcp-cert-gen:
         condition: service_completed_successfully
       backend-api:
         condition: service_started
@@ -46,7 +72,8 @@ services:
       AuthorizationServer__Issuer: https://auth.idp.madmetal.org
       AuthorizationServer__SigningKeyPath: /keys/signing-key.json
       IdmApiInstances__local__BaseUrl: http://backend-api:8080
-      IdmApiInstances__local__ApiKey: ${IDM_ADMIN_API_KEY:?Set IDM_ADMIN_API_KEY}
+      IdmApiInstances__local__ClientId: ${IDM_MCP_CLIENT_ID:-idm-mcp-backend}
+      IdmApiInstances__local__ClientCertificatePath: /keys/mcp-client.pem
       Mcp__DefaultInstance: local
       Mcp__Profile: HostedProduction
       Mcp__Hosted__Audience: ${MCP_AUDIENCE:-idm-demo-mcp}
