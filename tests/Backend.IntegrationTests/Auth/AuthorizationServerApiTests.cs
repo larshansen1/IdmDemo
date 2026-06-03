@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -472,17 +473,15 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
         IReadOnlyList<string> roles)
     {
         using var adminClient = factory.CreateClient();
-        adminClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.AdminBearerToken);
 
         foreach (var scope in scopes)
         {
-            await CreateScopeAsync(adminClient, scope);
+            await CreateScopeAsync(factory, adminClient, scope);
         }
 
         foreach (var role in roles)
         {
-            await CreateRoleAsync(adminClient, role);
+            await CreateRoleAsync(factory, adminClient, role);
         }
 
         var request = new CreateClientRequest
@@ -492,15 +491,23 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
             AssignedScopes = scopes,
             AssignedRoles = roles,
         };
-        var response = await adminClient.PostAsJsonAsync(new Uri("/scim/v2/Clients", UriKind.Relative), request);
+        var response = await SendAdminJsonAsync(
+            factory,
+            adminClient,
+            HttpMethod.Post,
+            new Uri("/scim/v2/Clients", UriKind.Relative),
+            request);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<ClientResponse>(content, _jsonOptions)!;
     }
 
-    private static async Task CreateRoleAsync(HttpClient adminClient, string value)
+    private static async Task CreateRoleAsync(TestWebApplicationFactory factory, HttpClient adminClient, string value)
     {
-        var response = await adminClient.PostAsJsonAsync(
+        var response = await SendAdminJsonAsync(
+            factory,
+            adminClient,
+            HttpMethod.Post,
             new Uri("/scim/v2/Roles", UriKind.Relative),
             new CreateRoleRequest { Value = value });
         if (response.StatusCode != HttpStatusCode.Conflict)
@@ -509,15 +516,51 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
         }
     }
 
-    private static async Task CreateScopeAsync(HttpClient adminClient, string value)
+    private static async Task CreateScopeAsync(TestWebApplicationFactory factory, HttpClient adminClient, string value)
     {
-        var response = await adminClient.PostAsJsonAsync(
+        var response = await SendAdminJsonAsync(
+            factory,
+            adminClient,
+            HttpMethod.Post,
             new Uri("/scim/v2/Scopes", UriKind.Relative),
             new CreateScopeRequest { Value = value });
         if (response.StatusCode != HttpStatusCode.Conflict)
         {
             response.EnsureSuccessStatusCode();
         }
+    }
+
+    private static async Task<HttpResponseMessage> SendAdminJsonAsync<T>(
+        TestWebApplicationFactory factory,
+        HttpClient adminClient,
+        HttpMethod method,
+        Uri requestUri,
+        T requestBody)
+    {
+        using var request = new HttpRequestMessage(method, requestUri)
+        {
+            Content = JsonContent.Create(requestBody),
+        };
+        AddAdminAuthorization(factory, request);
+        return await adminClient.SendAsync(request);
+    }
+
+    private static void AddAdminAuthorization(TestWebApplicationFactory factory, HttpRequestMessage request)
+    {
+        if (factory.AdminDpopKey is { } dpopKey)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("DPoP", factory.AdminBearerToken);
+            request.Headers.Add(
+                "DPoP",
+                CreateDpopProof(
+                    dpopKey,
+                    request.Method.Method,
+                    new Uri(new Uri("http://localhost"), request.RequestUri!),
+                    factory.AdminBearerToken));
+            return;
+        }
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.AdminBearerToken);
     }
 
     private async Task<ClientResponse> CreateClientAsync(

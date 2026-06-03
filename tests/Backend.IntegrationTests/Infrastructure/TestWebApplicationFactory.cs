@@ -27,6 +27,7 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>, 
     private readonly string _certificateAuthorityPath;
     private readonly bool _requireDpop;
     private readonly int? _tokenRateLimitPermitLimit;
+    private readonly RSA? _adminDpopKey;
 
     public TestWebApplicationFactory()
         : this(requireDpop: false, tokenRateLimitPermitLimit: null)
@@ -40,9 +41,12 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>, 
         this._certificateAuthorityPath = Path.Combine(Path.GetTempPath(), $"idm_test_ca_{Guid.NewGuid():N}.json");
         this._requireDpop = requireDpop;
         this._tokenRateLimitPermitLimit = tokenRateLimitPermitLimit;
+        this._adminDpopKey = requireDpop ? RSA.Create(2048) : null;
     }
 
     public string AdminBearerToken { get; private set; } = string.Empty;
+
+    internal RSA? AdminDpopKey => this._adminDpopKey;
 
     public static TestWebApplicationFactory CreateRequireDpop()
     {
@@ -95,8 +99,7 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>, 
 
         if (this._requireDpop)
         {
-            using var dpopKey = RSA.Create(2048);
-            tokenRequest.Headers.Add("DPoP", CreateDpopProof(dpopKey, "POST", tokenUri));
+            tokenRequest.Headers.Add("DPoP", CreateDpopProof(this._adminDpopKey!, "POST", tokenUri));
         }
 
         var tokenResponse = await httpClient.SendAsync(tokenRequest).ConfigureAwait(false);
@@ -158,6 +161,11 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>, 
         if (disposing && File.Exists(this._certificateAuthorityPath))
         {
             File.Delete(this._certificateAuthorityPath);
+        }
+
+        if (disposing)
+        {
+            this._adminDpopKey?.Dispose();
         }
     }
 

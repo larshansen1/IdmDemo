@@ -6,9 +6,9 @@ public sealed class AuthorizationServerOptions
 
     public string Audience { get; init; } = "idm-demo-api";
 
-    public int AccessTokenLifetimeSeconds { get; init; } = 3600;
+    public int AccessTokenLifetimeSeconds { get; init; } = 300;
 
-    public bool RequireDpop { get; init; }
+    public bool RequireDpop { get; init; } = true;
 
     public int DpopProofLifetimeSeconds { get; init; } = 300;
 

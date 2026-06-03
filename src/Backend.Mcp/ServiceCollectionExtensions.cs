@@ -72,7 +72,7 @@ public static class ServiceCollectionExtensions
         {
             Issuer = configuration?["AuthorizationServer:Issuer"] ?? "https://localhost:5001",
             Audience = runtimeSettings.Audience,
-            AccessTokenLifetimeSeconds = ReadInt(configuration, "AuthorizationServer:AccessTokenLifetimeSeconds", 3600),
+            AccessTokenLifetimeSeconds = ReadInt(configuration, "AuthorizationServer:AccessTokenLifetimeSeconds", 300),
             RequireDpop = runtimeSettings.RequireDpop,
             DpopProofLifetimeSeconds = ReadInt(configuration, "AuthorizationServer:DpopProofLifetimeSeconds", 300),
             DpopReplayCacheSeconds = ReadInt(configuration, "AuthorizationServer:DpopReplayCacheSeconds", 300),
