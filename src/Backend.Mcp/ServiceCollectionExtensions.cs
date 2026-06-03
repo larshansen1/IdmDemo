@@ -40,6 +40,8 @@ public static class ServiceCollectionExtensions
 
         services.AddHttpContextAccessor();
         services.AddHttpClient<IIdmApiClient, IdmApiClient>();
+        services.AddHttpClient("idm-token");
+        services.AddSingleton<IIdmApiTokenProvider, IdmApiTokenProvider>();
         services.AddSingleton(authorizationServerOptions);
         services.AddSingleton<IJwtSigningKeyStore>(_ => new LocalJwtSigningKeyStore(signingKeyPath));
         services.AddSingleton<IDpopReplayCache, InMemoryDpopReplayCache>();

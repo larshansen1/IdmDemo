@@ -73,7 +73,7 @@ if (app.Environment.IsDevelopment())
 app.UseExceptionHandler();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
-app.UseMiddleware<ApiKeyMiddleware>();
+app.UseMiddleware<ScimOAuthMiddleware>();
 
 app.MapControllers();
 

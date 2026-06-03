@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Backend.Application.Models.Scim;
@@ -23,7 +24,8 @@ public sealed class UsersApiTests : IClassFixture<TestWebApplicationFactory>
         ArgumentNullException.ThrowIfNull(factory);
         this._factory = factory;
         this._client = factory.CreateClient();
-        this._client.DefaultRequestHeaders.Add("X-Api-Key", TestWebApplicationFactory.TestApiKey);
+        this._client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", factory.AdminBearerToken);
     }
 
     [Fact]

@@ -24,7 +24,8 @@ public sealed class McpStdioSmokeTests
             EnvironmentVariables = new Dictionary<string, string?>
             {
                 ["IdmApiInstances__local__BaseUrl"] = "http://127.0.0.1:1",
-                ["IdmApiInstances__local__ApiKey"] = "changeme-development-key",
+                ["IdmApiInstances__local__ClientId"] = "mcp-smoke-test",
+                ["IdmApiInstances__local__ClientCertificatePath"] = "/nonexistent/cert.pem",
                 ["Mcp__DefaultInstance"] = "local",
                 ["Mcp__ReadOnly"] = "false",
             },
@@ -46,7 +47,8 @@ public sealed class McpStdioSmokeTests
         Assert.True(result.IsError);
         Assert.Contains(
             result.Content,
-            content => content.ToString()!.Contains("Could not reach the IdM API", StringComparison.Ordinal));
+            content => content.ToString()!.Contains("Could not load client certificate", StringComparison.Ordinal) ||
+                       content.ToString()!.Contains("Could not reach the IdM", StringComparison.Ordinal));
     }
 
     private static string FindRepoRoot()

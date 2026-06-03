@@ -8,6 +8,8 @@ public sealed class ValidatedAccessToken
 
     public string Scope { get; init; } = string.Empty;
 
+    public IReadOnlyList<string> Roles { get; init; } = [];
+
     public string? DpopJwkThumbprint { get; init; }
 
     public string? CertificateThumbprintSha256 { get; init; }

@@ -23,10 +23,10 @@ public sealed class McpReadinessProbeTests
     }
 
     [Fact]
-    public async Task CheckAsync_MissingApiKey_ReturnsUnhealthyWithoutCallingApi()
+    public async Task CheckAsync_MissingClientId_ReturnsUnhealthyWithoutCallingApi()
     {
         var called = false;
-        var instances = CreateInstances(apiKey: null);
+        var instances = CreateInstances(clientId: null);
         using var factory = new StubHttpClientFactory(_ =>
         {
             called = true;
@@ -38,7 +38,7 @@ public sealed class McpReadinessProbeTests
 
         Assert.Equal("Unhealthy", report.Status);
         Assert.False(called);
-        Assert.Contains(report.Errors, error => error.Contains("missing ApiKey", StringComparison.Ordinal));
+        Assert.Contains(report.Errors, error => error.Contains("missing ClientId", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -173,7 +173,8 @@ public sealed class McpReadinessProbeTests
         {
             ["local"] = new IdmApiInstanceOptions
             {
-                ApiKey = "changeme-development-key",
+                ClientId = "mcp-local",
+                ClientCertificatePath = "/certs/local.pem",
             },
         };
         using var factory = new StubHttpClientFactory(_ =>
@@ -233,18 +234,19 @@ public sealed class McpReadinessProbeTests
     {
         return new McpReadinessProbe(
             httpClientFactory,
-            Options.Create(instances ?? CreateInstances("changeme-development-key")),
+            Options.Create(instances ?? CreateInstances()),
             Options.Create(runtime ?? new McpRuntimeOptions { Profile = McpProfile.HostedProduction }));
     }
 
-    private static IdmApiInstancesOptions CreateInstances(string? apiKey)
+    private static IdmApiInstancesOptions CreateInstances(string? clientId = "mcp-local", string? certPath = "/certs/local.pem")
     {
         return new IdmApiInstancesOptions
         {
             ["local"] = new IdmApiInstanceOptions
             {
                 BaseUrl = new Uri("http://127.0.0.1:5000"),
-                ApiKey = apiKey,
+                ClientId = clientId,
+                ClientCertificatePath = certPath,
             },
         };
     }

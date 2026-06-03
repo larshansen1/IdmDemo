@@ -39,11 +39,16 @@ public sealed class IdmApiInstanceResolver : IIdmApiInstanceResolver
             throw new McpConfigurationException($"IdM API instance '{name}' is missing BaseUrl.");
         }
 
-        if (string.IsNullOrWhiteSpace(instance.ApiKey))
+        if (string.IsNullOrWhiteSpace(instance.ClientId))
         {
-            throw new McpConfigurationException($"IdM API instance '{name}' is missing ApiKey.");
+            throw new McpConfigurationException($"IdM API instance '{name}' is missing ClientId.");
         }
 
-        return new ResolvedIdmApiInstance(name, instance.BaseUrl, instance.ApiKey);
+        if (string.IsNullOrWhiteSpace(instance.ClientCertificatePath))
+        {
+            throw new McpConfigurationException($"IdM API instance '{name}' is missing ClientCertificatePath.");
+        }
+
+        return new ResolvedIdmApiInstance(name, instance.BaseUrl, instance.ClientId, instance.ClientCertificatePath);
     }
 }

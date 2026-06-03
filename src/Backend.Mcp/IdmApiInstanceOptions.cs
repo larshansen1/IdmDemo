@@ -8,5 +8,8 @@ public sealed class IdmApiInstanceOptions
     public Uri? BaseUrl { get; init; }
 
     [Required]
-    public string? ApiKey { get; init; }
+    public string? ClientId { get; init; }
+
+    [Required]
+    public string? ClientCertificatePath { get; init; }
 }

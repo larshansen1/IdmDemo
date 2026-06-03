@@ -41,9 +41,18 @@ public sealed class AccessTokenValidator : IAccessTokenValidator
             Subject = ReadRequiredClaim(token, JwtRegisteredClaimNames.Sub),
             ClientId = ReadRequiredClaim(token, "client_id"),
             Scope = ReadOptionalClaim(token, "scope") ?? string.Empty,
+            Roles = ReadRoles(token),
             DpopJwkThumbprint = confirmation.DpopJwkThumbprint,
             CertificateThumbprintSha256 = confirmation.CertificateThumbprintSha256,
         };
+    }
+
+    private static List<string> ReadRoles(JsonWebToken token)
+    {
+        return token.Claims
+            .Where(c => string.Equals(c.Type, "roles", StringComparison.Ordinal))
+            .Select(c => c.Value)
+            .ToList();
     }
 
     private static string? ReadOptionalClaim(JsonWebToken token, string claimType)

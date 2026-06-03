@@ -283,6 +283,7 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
     public async Task PostToken_RequireDpopWithoutProof_ReturnsInvalidDpopProof()
     {
         await using var factory = TestWebApplicationFactory.CreateRequireDpop();
+        await factory.InitializeAsync();
         using var client = factory.CreateClient();
         var clientId = $"required-dpop-{Guid.NewGuid():N}";
         using var certificate = CreateCertificate(clientId);
@@ -299,6 +300,7 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
     public async Task PostToken_RequireDpopWithValidProof_ReturnsDpopToken()
     {
         await using var factory = TestWebApplicationFactory.CreateRequireDpop();
+        await factory.InitializeAsync();
         using var client = factory.CreateClient();
         var clientId = $"required-dpop-{Guid.NewGuid():N}";
         using var certificate = CreateCertificate(clientId);
@@ -454,7 +456,8 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
         IReadOnlyList<string> roles)
     {
         using var adminClient = factory.CreateClient();
-        adminClient.DefaultRequestHeaders.Add("X-Api-Key", TestWebApplicationFactory.TestApiKey);
+        adminClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.AdminBearerToken);
 
         foreach (var scope in scopes)
         {

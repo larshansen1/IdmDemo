@@ -134,16 +134,15 @@ public sealed class McpReadinessProbe : IMcpReadinessProbe
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(instance.ApiKey))
+            if (string.IsNullOrWhiteSpace(instance.ClientId))
             {
-                errors.Add($"IdM API instance '{name}' is missing ApiKey.");
+                errors.Add($"IdM API instance '{name}' is missing ClientId.");
                 continue;
             }
 
             using var request = new HttpRequestMessage(
                 HttpMethod.Get,
                 new Uri(instance.BaseUrl, ".well-known/openid-configuration"));
-            request.Headers.Add("X-Api-Key", instance.ApiKey);
 
             try
             {

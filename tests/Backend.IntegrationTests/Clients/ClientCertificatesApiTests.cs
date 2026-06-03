@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -28,7 +29,8 @@ public sealed class ClientCertificatesApiTests : IClassFixture<TestWebApplicatio
         ArgumentNullException.ThrowIfNull(factory);
         this._factory = factory;
         this._client = factory.CreateClient();
-        this._client.DefaultRequestHeaders.Add("X-Api-Key", TestWebApplicationFactory.TestApiKey);
+        this._client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", factory.AdminBearerToken);
     }
 
     [Fact]
@@ -92,7 +94,7 @@ public sealed class ClientCertificatesApiTests : IClassFixture<TestWebApplicatio
     }
 
     [Fact]
-    public async Task GetCertificateAuthority_RequiresAdminApiKey()
+    public async Task GetCertificateAuthority_RequiresAdminBearerToken()
     {
         using var anonymousClient = this._factory.CreateClient();
 
