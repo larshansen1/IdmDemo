@@ -43,12 +43,14 @@ public sealed class IdmApiInstanceResolverTests
             ["local"] = new IdmApiInstanceOptions
             {
                 BaseUrl = new Uri("https://localhost:5001"),
-                ApiKey = "local-key",
+                ClientId = "mcp-local",
+                ClientCertificatePath = "/certs/local.pem",
             },
             ["test"] = new IdmApiInstanceOptions
             {
                 BaseUrl = new Uri("https://localhost:5003"),
-                ApiKey = "test-key",
+                ClientId = "mcp-test",
+                ClientCertificatePath = "/certs/test.pem",
             },
         };
         var runtime = new McpRuntimeOptions { DefaultInstance = "local" };

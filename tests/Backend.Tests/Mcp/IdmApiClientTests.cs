@@ -10,6 +10,7 @@ using Backend.Application.Models.Users;
 using Backend.Mcp;
 using Backend.Mcp.Api;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Xunit;
 
 namespace Backend.Tests.Mcp;
@@ -128,7 +129,7 @@ public sealed class IdmApiClientTests
     }
 
     [Fact]
-    public async Task GetClientAsync_ExplicitInstance_SendsApiKeyAndCorrelationId()
+    public async Task GetClientAsync_ExplicitInstance_SendsBearerTokenAndCorrelationId()
     {
         var clientId = Guid.NewGuid();
         using var handler = new CapturingHandler(new ClientResponse
@@ -146,8 +147,7 @@ public sealed class IdmApiClientTests
         Assert.Equal(HttpMethod.Get, handler.Request!.Method);
         Assert.Equal(new Uri($"https://localhost:5003/scim/v2/Clients/{clientId:D}"), handler.Request.RequestUri);
         Assert.True(handler.Request.Headers.Contains("X-Correlation-Id"));
-        Assert.True(handler.Request.Headers.TryGetValues("X-Api-Key", out var values));
-        Assert.Contains("test-key", values);
+        Assert.Equal("Bearer test-bearer-token", handler.Request.Headers.Authorization?.ToString());
     }
 
     [Fact]
@@ -257,22 +257,29 @@ public sealed class IdmApiClientTests
             ["local"] = new IdmApiInstanceOptions
             {
                 BaseUrl = new Uri("https://localhost:5001"),
-                ApiKey = "local-key",
+                ClientId = "mcp-local",
+                ClientCertificatePath = "/certs/local.pem",
             },
             ["test"] = new IdmApiInstanceOptions
             {
                 BaseUrl = new Uri("https://localhost:5003"),
-                ApiKey = "test-key",
+                ClientId = "mcp-test",
+                ClientCertificatePath = "/certs/test.pem",
             },
         };
         var resolver = new IdmApiInstanceResolver(
             Options.Create(instances),
             Options.Create(new McpRuntimeOptions { DefaultInstance = "local" }));
 
+        var tokenProvider = Substitute.For<IIdmApiTokenProvider>();
+        tokenProvider
+            .GetAccessTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("test-bearer-token");
+
 #pragma warning disable CA2000
         var httpClient = new HttpClient(handler, false);
 #pragma warning restore CA2000
-        return new IdmApiClient(httpClient, resolver);
+        return new IdmApiClient(httpClient, resolver, tokenProvider);
     }
 
     private sealed class CapturingHandler : HttpMessageHandler

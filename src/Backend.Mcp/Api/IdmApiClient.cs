@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
@@ -18,14 +19,17 @@ public sealed class IdmApiClient : IIdmApiClient
 
     private readonly HttpClient _httpClient;
     private readonly IIdmApiInstanceResolver _instanceResolver;
+    private readonly IIdmApiTokenProvider _tokenProvider;
 
-    public IdmApiClient(HttpClient httpClient, IIdmApiInstanceResolver instanceResolver)
+    public IdmApiClient(HttpClient httpClient, IIdmApiInstanceResolver instanceResolver, IIdmApiTokenProvider tokenProvider)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(instanceResolver);
+        ArgumentNullException.ThrowIfNull(tokenProvider);
 
         this._httpClient = httpClient;
         this._instanceResolver = instanceResolver;
+        this._tokenProvider = tokenProvider;
     }
 
     public Task<IdmApiCallResult<UserResponse>> CreateUserAsync(
@@ -246,11 +250,28 @@ public sealed class IdmApiClient : IIdmApiClient
         object requestBody,
         CancellationToken cancellationToken)
     {
-        using var request = this.CreateRequest(instance, method, relativePath, out var resolved, out var correlationId);
-        request.Content = JsonContent.Create(requestBody, options: _jsonOptions);
-        request.Content.Headers.ContentType = new("application/scim+json");
+        string correlationId = Guid.NewGuid().ToString("D", CultureInfo.InvariantCulture);
+        (HttpRequestMessage Request, string InstanceName, string CorrelationId) prepared;
+        try
+        {
+            prepared = await this.CreateRequestAsync(instance, method, relativePath, cancellationToken).ConfigureAwait(false);
+            correlationId = prepared.CorrelationId;
+        }
+        catch (HttpRequestException exception)
+        {
+            throw new IdmApiException(
+                System.Net.HttpStatusCode.ServiceUnavailable,
+                correlationId,
+                $"Could not reach the IdM token endpoint. CorrelationId={correlationId}",
+                exception);
+        }
 
-        return await this.SendPreparedAsync<T>(request, resolved.Name, correlationId, cancellationToken).ConfigureAwait(false);
+        using (prepared.Request)
+        {
+            prepared.Request.Content = JsonContent.Create(requestBody, options: _jsonOptions);
+            prepared.Request.Content.Headers.ContentType = new("application/scim+json");
+            return await this.SendPreparedAsync<T>(prepared.Request, prepared.InstanceName, correlationId, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task<IdmApiCallResult<T>> SendAsync<T>(
@@ -259,26 +280,42 @@ public sealed class IdmApiClient : IIdmApiClient
         string relativePath,
         CancellationToken cancellationToken)
     {
-        using var request = this.CreateRequest(instance, method, relativePath, out var resolved, out var correlationId);
-        return await this.SendPreparedAsync<T>(request, resolved.Name, correlationId, cancellationToken).ConfigureAwait(false);
+        string correlationId = Guid.NewGuid().ToString("D", CultureInfo.InvariantCulture);
+        (HttpRequestMessage Request, string InstanceName, string CorrelationId) prepared;
+        try
+        {
+            prepared = await this.CreateRequestAsync(instance, method, relativePath, cancellationToken).ConfigureAwait(false);
+            correlationId = prepared.CorrelationId;
+        }
+        catch (HttpRequestException exception)
+        {
+            throw new IdmApiException(
+                System.Net.HttpStatusCode.ServiceUnavailable,
+                correlationId,
+                $"Could not reach the IdM token endpoint. CorrelationId={correlationId}",
+                exception);
+        }
+
+        using var req = prepared.Request;
+        return await this.SendPreparedAsync<T>(req, prepared.InstanceName, correlationId, cancellationToken).ConfigureAwait(false);
     }
 
-    private HttpRequestMessage CreateRequest(
+    private async Task<(HttpRequestMessage Request, string InstanceName, string CorrelationId)> CreateRequestAsync(
         string? instanceName,
         HttpMethod method,
         string relativePath,
-        out ResolvedIdmApiInstance resolved,
-        out string correlationId)
+        CancellationToken cancellationToken)
     {
-        resolved = this._instanceResolver.Resolve(instanceName);
-        correlationId = Guid.NewGuid().ToString("D", CultureInfo.InvariantCulture);
+        var resolved = this._instanceResolver.Resolve(instanceName);
+        var correlationId = Guid.NewGuid().ToString("D", CultureInfo.InvariantCulture);
+        var token = await this._tokenProvider.GetAccessTokenAsync(resolved.Name, cancellationToken).ConfigureAwait(false);
 
         var uri = new Uri(resolved.BaseUrl, relativePath);
         var request = new HttpRequestMessage(method, uri);
-        request.Headers.Add("X-Api-Key", resolved.ApiKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("X-Correlation-Id", correlationId);
         request.Headers.Accept.ParseAdd("application/json");
-        return request;
+        return (request, resolved.Name, correlationId);
     }
 
     private async Task<IdmApiCallResult<T>> SendPreparedAsync<T>(
