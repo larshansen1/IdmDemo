@@ -19,6 +19,9 @@ certificate-authority.json
 src/Backend.Api/signing-key.json
 src/Backend.Api/certificate-authority.json
 
+## Deployment secrets
+deploy/production/.env
+
 ## SQLite
 *.db
 *.db-shm

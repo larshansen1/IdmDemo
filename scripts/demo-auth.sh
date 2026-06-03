@@ -104,6 +104,42 @@ check_value() {
     echo ""
 }
 
+ensure_scope() {
+    local scope="$1"
+
+    do_request POST /scim/v2/Scopes "${auth_h[@]}" "${scim_ct_h[@]}" \
+        -d "{\"value\":\"$scope\",\"displayName\":\"$scope\",\"active\":true}"
+
+    if [ "$_STATUS" -eq 201 ] || [ "$_STATUS" -eq 409 ]; then
+        echo "  ✔  Scope $scope is available (HTTP $_STATUS)"
+        pass=$((pass + 1))
+    else
+        echo "  ✘  Scope $scope setup failed — HTTP $_STATUS"
+        [ "$VERBOSE" -eq 0 ] && [ -n "$_BODY" ] && echo "     $(echo "$_BODY" | head -1 | cut -c1-120)"
+        fail=$((fail + 1))
+        exit 1
+    fi
+    echo ""
+}
+
+ensure_role() {
+    local role="$1"
+
+    do_request POST /scim/v2/Roles "${auth_h[@]}" "${scim_ct_h[@]}" \
+        -d "{\"value\":\"$role\",\"displayName\":\"$role\",\"active\":true}"
+
+    if [ "$_STATUS" -eq 201 ] || [ "$_STATUS" -eq 409 ]; then
+        echo "  ✔  Role $role is available (HTTP $_STATUS)"
+        pass=$((pass + 1))
+    else
+        echo "  ✘  Role $role setup failed — HTTP $_STATUS"
+        [ "$VERBOSE" -eq 0 ] && [ -n "$_BODY" ] && echo "     $(echo "$_BODY" | head -1 | cut -c1-120)"
+        fail=$((fail + 1))
+        exit 1
+    fi
+    echo ""
+}
+
 json_field() {
     python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('$1',''))" 2>/dev/null || echo ""
 }
@@ -254,6 +290,11 @@ auth_h=(-H "Authorization: Bearer $ADMIN_TOKEN")
 echo "  OK   Acquired scim.admin bearer token"
 echo ""
 
+header "Access catalog setup"
+ensure_scope "orders.read"
+ensure_scope "orders.write"
+ensure_role "service-admin"
+
 header "Generate client certificate"
 
 openssl req \
@@ -303,6 +344,11 @@ header "Register machine client"
 do_request POST /scim/v2/Clients "${auth_h[@]}" "${scim_ct_h[@]}" \
     -d "{\"clientId\":\"$CLIENT_ID\",\"displayName\":\"Orders Auth Demo\",\"active\":true,\"certificateThumbprintSha256\":\"$CERT_THUMBPRINT\",\"certificateSubject\":\"CN=$CLIENT_ID\",\"assignedScopes\":[\"orders.read\",\"orders.write\"],\"assignedRoles\":[\"service-admin\"]}"
 check "POST /scim/v2/Clients with certificate metadata → 201" 201 "$_STATUS" "$_BODY"
+if [ "$_STATUS" -ne 201 ]; then
+    echo "Stopping demo: client registration failed."
+    print_result_summary
+    exit 1
+fi
 CLIENT_RECORD_ID=$(echo "$_BODY" | json_field id)
 
 header "Issue certificate-bound JWT"
