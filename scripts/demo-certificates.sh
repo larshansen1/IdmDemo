@@ -152,6 +152,42 @@ with open(sys.argv[1], encoding="utf-8") as handle:
 PY
 }
 
+ensure_scope() {
+    local scope="$1"
+
+    do_request POST /scim/v2/Scopes "${auth_h[@]}" "${scim_ct_h[@]}" \
+        -d "{\"value\":\"$scope\",\"displayName\":\"$scope\",\"active\":true}"
+
+    if [ "$_STATUS" -eq 201 ] || [ "$_STATUS" -eq 409 ]; then
+        echo "  [OK] Scope $scope is available (HTTP $_STATUS)"
+        pass=$((pass + 1))
+    else
+        echo "  [FAIL] Scope $scope setup failed - HTTP $_STATUS"
+        [ "$VERBOSE" -eq 0 ] && [ -n "$_BODY" ] && echo "     $(echo "$_BODY" | head -1 | cut -c1-120)"
+        fail=$((fail + 1))
+        stop_demo "Scope $scope setup failed."
+    fi
+    echo ""
+}
+
+ensure_role() {
+    local role="$1"
+
+    do_request POST /scim/v2/Roles "${auth_h[@]}" "${scim_ct_h[@]}" \
+        -d "{\"value\":\"$role\",\"displayName\":\"$role\",\"active\":true}"
+
+    if [ "$_STATUS" -eq 201 ] || [ "$_STATUS" -eq 409 ]; then
+        echo "  [OK] Role $role is available (HTTP $_STATUS)"
+        pass=$((pass + 1))
+    else
+        echo "  [FAIL] Role $role setup failed - HTTP $_STATUS"
+        [ "$VERBOSE" -eq 0 ] && [ -n "$_BODY" ] && echo "     $(echo "$_BODY" | head -1 | cut -c1-120)"
+        fail=$((fail + 1))
+        stop_demo "Role $role setup failed."
+    fi
+    echo ""
+}
+
 cert_der_base64() {
     openssl x509 -in "$1" -outform DER | base64 | tr -d '\n'
 }
@@ -190,6 +226,10 @@ ADMIN_TOKEN=$(echo "$_admin_resp" | python3 -c 'import sys,json; print(json.load
 auth_h=(-H "Authorization: Bearer $ADMIN_TOKEN")
 echo "Admin token  : acquired"
 echo ""
+
+header "Access catalog setup"
+ensure_scope "orders.read"
+ensure_role "service-admin"
 
 header "Create machine client"
 

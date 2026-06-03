@@ -20,15 +20,17 @@ Epic 5 (complete) — Global role and scope catalog management, user role assign
 
 Epic 6 (complete) — MCP administrative interface over stdio for user, machine-client, role, scope, certificate, discovery, and JWKS operations.
 
-Epic 7 (in progress) — Hosted MCP profiles for local and production agent workflows, DPoP-bound hosted access, MCP tool authorization, audit events, and higher-level machine-client credential workflow tools.
+Epic 7 (complete) — Hosted MCP profiles for local and production agent workflows, DPoP-bound hosted access, MCP tool authorization, audit events, and higher-level machine-client credential workflow tools.
 
-See [product.md](product.md) for the full roadmap.
+See [product.md](product.md) for the full roadmap and
+[docs/current-architecture.md](docs/current-architecture.md) for the current
+runtime and production boundary.
 
 ---
 
 ## API
 
-Administrative SCIM, certificate, role, scope, and access-management endpoints require `X-Api-Key: <key>` (default: `changeme-development-key`) and use `Content-Type: application/scim+json`.
+Administrative SCIM, certificate, role, scope, and access-management endpoints require `Authorization: Bearer <token>` where the token has the `scim.admin` role. They use `Content-Type: application/scim+json`.
 
 Authorization-server discovery and JWKS are public. Token requests use OAuth-style form encoding and OAuth-style error responses.
 
@@ -96,7 +98,7 @@ GET  /.well-known/jwks.json
 POST /connect/token
 ```
 
-`/connect/token` supports `grant_type=client_credentials` for registered machine clients. The client certificate is supplied by the TLS layer in production; the local demo and tests use `X-Client-Cert` with a base64 DER certificate to simulate that boundary.
+`/connect/token` supports `grant_type=client_credentials` for registered machine clients. The client certificate is supplied by the TLS layer in production. Local development and private deployment-host smoke tests may use `X-Client-Cert` with a base64 DER certificate when `AuthorizationServer:EnableForwardedClientCertificate` is enabled and the caller is inside the trusted proxy boundary.
 
 When a token request omits `DPoP`, the server issues a certificate-bound bearer token with `cnf.x5t#S256`. When a request includes a valid `DPoP` proof JWT, the server issues a DPoP-bound token with `token_type=DPoP` and `cnf.jkt`.
 
@@ -106,16 +108,18 @@ Swagger UI is available at `/swagger` when running in Development mode.
 
 ## MCP server
 
-`Backend.Mcp` exposes the administrative API as an MCP server named `idm-demo-mcp`. The default profile is `LocalStdio` for local agent workflows. Hosted HTTP profiles call `Backend.Api` using the configured internal administrative API key.
+`Backend.Mcp` exposes the administrative API as an MCP server named `idm-demo-mcp`. The default profile is `LocalStdio` for local agent workflows. Hosted HTTP profiles call `Backend.Api` using a configured machine-client identity and admin bearer token.
 
 Start the API first:
 
 ```bash
-AdminApi__ApiKey=changeme-development-key \
 AuthorizationServer__Issuer=http://localhost:5000 \
 AuthorizationServer__Audience=idm-demo-mcp \
 AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
 AuthorizationServer__EnableForwardedClientCertificate=true \
+ScimAdmin__SeedClientId=idm-admin \
+ScimAdmin__SeedCertPath=/tmp/idmdemo-dev/admin-client.pem \
+ScimAdmin__GenerateCertIfMissing=true \
 ConnectionStrings__Default="Data Source=idm-demo.db" \
 dotnet run --project src/Backend.Api --urls http://localhost:5000
 ```
@@ -124,7 +128,8 @@ Run the local stdio MCP profile with a configured IdM API instance:
 
 ```bash
 IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
-IdmApiInstances__local__ApiKey=changeme-development-key \
+IdmApiInstances__local__ClientId=idm-admin \
+IdmApiInstances__local__ClientCertificatePath=/tmp/idmdemo-dev/admin-client.pem \
 Mcp__Profile=LocalStdio \
 Mcp__DefaultInstance=local \
 Mcp__ReadOnly=false \
@@ -137,7 +142,8 @@ Run the local hosted development profile:
 
 ```bash
 IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
-IdmApiInstances__local__ApiKey=changeme-development-key \
+IdmApiInstances__local__ClientId=idm-admin \
+IdmApiInstances__local__ClientCertificatePath=/tmp/idmdemo-dev/admin-client.pem \
 AuthorizationServer__Issuer=http://localhost:5000 \
 AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
 Mcp__Profile=LocalHostedDevelopment \
@@ -151,7 +157,8 @@ Run the hosted production profile:
 
 ```bash
 IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
-IdmApiInstances__local__ApiKey=changeme-development-key \
+IdmApiInstances__local__ClientId=idm-admin \
+IdmApiInstances__local__ClientCertificatePath=/tmp/idmdemo-dev/admin-client.pem \
 AuthorizationServer__Issuer=http://localhost:5000 \
 AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
 Mcp__Profile=HostedProduction \
@@ -195,7 +202,7 @@ Environment overrides for hosted demo scripts:
 ```bash
 API_BASE_URL=http://localhost:5000 \
 MCP_BASE_URL=http://localhost:5100 \
-API_KEY=changeme-development-key \
+ADMIN_CERT_PATH=/tmp/idmdemo-dev/admin-client.pem \
 MCP_AUDIENCE=idm-demo-mcp \
 bash scripts/demo-mcp-local-hosted-development.sh --verbose
 ```
@@ -216,10 +223,10 @@ Production endpoint boundary:
 | --- | --- | --- | --- |
 | `Backend.Mcp` | `/mcp` | Public resource behind trusted reverse proxy | IdmDemo-issued MCP access token with `aud` equal to `Mcp:Hosted:Audience`; `HostedProduction` requires DPoP |
 | `Backend.Mcp` | `/health/live`, `/health/ready` | Operational endpoint, deployment-controlled | Protected by infrastructure policy when exposed |
-| `Backend.Api` | discovery and token issuance | Exposed only as needed for OAuth clients | Client certificate authentication for token issuance; optional DPoP proof binds issued tokens |
-| `Backend.Api` | SCIM, certificate, role, scope, and access-management administration | Private/internal only | Internal `X-Api-Key` while the administrative API-key boundary remains in place |
+| `Backend.Api` | discovery and token issuance | Public when explicitly exposed by nginx | Client certificate authentication for token issuance; optional DPoP proof binds issued tokens |
+| `Backend.Api` | SCIM, certificate, role, scope, and access-management administration | Private/internal only | `scim.admin` bearer token |
 
-MCP tokens and API administrative access are separate resource boundaries in this phase. MCP callers present tokens for the MCP audience; hosted MCP then calls private `Backend.Api` with the configured internal administrative API key. Public production traffic should reach only the hosted MCP resource and any explicitly exposed OAuth discovery/token endpoints, not API administrative routes. Strip and recreate forwarded headers at the trusted proxy boundary only. The configured IdM API key is an internal MCP-to-API credential and must not be accepted from or exposed to hosted MCP callers.
+MCP tokens and API administrative access are separate resource boundaries in this phase. MCP callers present tokens for the MCP audience; hosted MCP then calls private `Backend.Api` with its configured machine-client identity and a `scim.admin` bearer token. Public production traffic should reach only the hosted MCP resource and explicitly exposed OAuth discovery/token endpoints, not API administrative routes. Strip and recreate forwarded headers at the trusted proxy boundary only.
 
 ### MCP tools
 
@@ -296,12 +303,16 @@ dotnet run --project src/Backend.Api
 
 The API starts on `http://localhost:5000`. The SQLite database (`idm.db`) is created automatically on first run via EF Core migrations.
 
-For the demo scripts, use an explicit URL, API key, issuer, and disposable database path so the scripts and token issuer agree on the local origin:
+For the demo scripts, use an explicit URL, issuer, signing key path, seeded admin client, and disposable database path so the scripts and token issuer agree on the local origin:
 
 ```bash
-AdminApi__ApiKey=changeme-development-key \
 AuthorizationServer__Issuer=http://localhost:5000 \
+AuthorizationServer__Audience=idm-demo-mcp \
+AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
 AuthorizationServer__EnableForwardedClientCertificate=true \
+ScimAdmin__SeedClientId=idm-admin \
+ScimAdmin__SeedCertPath=/tmp/idmdemo-dev/admin-client.pem \
+ScimAdmin__GenerateCertIfMissing=true \
 ConnectionStrings__Default="Data Source=idm-demo.db" \
 dotnet run --project src/Backend.Api --urls http://localhost:5000
 ```
@@ -318,21 +329,24 @@ bash scripts/demo-mcp-local-stdio.sh # run local stdio MCP smoke scenarios
 bash scripts/demo-mcp-local-hosted-development.sh # run local hosted MCP bearer and DPoP scenarios
 bash scripts/demo-mcp-phase-5-workflows.sh # run hosted MCP workflow scenarios
 bash scripts/demo-mcp-hosted-production.sh # run hosted production DPoP scenarios
+bash scripts/demo-mcp-remote-production-smoke.sh # run remote public auth/MCP smoke scenarios
 ```
 
 Environment overrides:
 
 ```bash
-API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-api.sh
-API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-certificates.sh
-API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-auth.sh
-API_BASE_URL=https://your-host API_KEY=your-key bash scripts/demo-access-management.sh
-API_BASE_URL=https://your-api MCP_BASE_URL=https://your-mcp API_KEY=your-key MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-local-hosted-development.sh
-API_BASE_URL=http://127.0.0.1:5000 AUTH_BASE_URL=https://auth.idp.madmetal.org MCP_BASE_URL=https://mcp.idp.madmetal.org MCP_HEALTH_BASE_URL=http://127.0.0.1:5100 API_KEY=your-key MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-hosted-production.sh
+API_BASE_URL=https://your-host ADMIN_CERT_PATH=./admin-client.pem bash scripts/demo-api.sh
+API_BASE_URL=https://your-host ADMIN_CERT_PATH=./admin-client.pem bash scripts/demo-certificates.sh
+API_BASE_URL=https://your-host ADMIN_CERT_PATH=./admin-client.pem bash scripts/demo-auth.sh
+API_BASE_URL=https://your-host ADMIN_CERT_PATH=./admin-client.pem bash scripts/demo-access-management.sh
+API_BASE_URL=https://your-api MCP_BASE_URL=https://your-mcp ADMIN_CERT_PATH=./admin-client.pem MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-local-hosted-development.sh
+API_BASE_URL=http://127.0.0.1:5000 AUTH_BASE_URL=http://127.0.0.1:5000 AUTH_DPOP_BASE_URL=https://auth.idp.madmetal.org MCP_BASE_URL=https://mcp.idp.madmetal.org MCP_HEALTH_BASE_URL=http://127.0.0.1:5100 ADMIN_CERT_PATH=/tmp/idmdemo-prod-admin-client.pem MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-hosted-production.sh
+AUTH_BASE_URL=https://auth.idp.madmetal.org AUTH_DPOP_BASE_URL=https://auth.idp.madmetal.org MCP_BASE_URL=https://mcp.idp.madmetal.org ADMIN_CERT_PATH=./idmdemo-prod-admin-client.pem MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-remote-production-smoke.sh
 ```
 
-Production Docker Compose and NGINX deployment notes are in
-[`docs/production-hetzner-docker-compose.md`](docs/production-hetzner-docker-compose.md).
+Current production architecture and smoke-test notes are in
+[`docs/current-architecture.md`](docs/current-architecture.md). Older epic and
+deployment notes are archived in [`docs/archive/`](docs/archive/).
 
 ---
 
@@ -357,6 +371,7 @@ Production Docker Compose and NGINX deployment notes are in
 │   ├── demo-mcp-local-stdio.sh # local stdio MCP demo
 │   ├── demo-mcp-local-hosted-development.sh # local hosted MCP demo
 │   ├── demo-mcp-hosted-production.sh # hosted production MCP demo
+│   ├── demo-mcp-remote-production-smoke.sh # public remote production smoke demo
 │   ├── demo-mcp-phase-5-workflows.sh # MCP workflow demo
 │   ├── lib/mcp-demo-helpers.sh # shared hosted MCP demo helpers
 │   ├── check-complexity.sh
@@ -434,11 +449,10 @@ Hooks run automatically on `git commit`:
 
 ```json
 {
-  "AdminApi": { "ApiKey": "changeme-development-key" },
   "ConnectionStrings": { "Default": "Data Source=idm.db" },
   "AuthorizationServer": {
     "Issuer": "https://idmdemo.test",
-    "Audience": "idm-demo-api",
+    "Audience": "idm-demo-mcp",
     "AccessTokenLifetimeSeconds": 3600,
     "RequireDpop": false,
     "DpopProofLifetimeSeconds": 300,
@@ -447,6 +461,11 @@ Hooks run automatically on `git commit`:
     "SigningKeyPath": "signing-key.json",
     "ForwardedClientCertificateHeader": "X-Client-Cert",
     "EnableForwardedClientCertificate": false
+  },
+  "ScimAdmin": {
+    "SeedClientId": "idm-admin",
+    "SeedCertPath": "admin-client.pem",
+    "GenerateCertIfMissing": true
   }
 }
 ```
@@ -458,7 +477,8 @@ Hooks run automatically on `git commit`:
   "IdmApiInstances": {
     "local": {
       "BaseUrl": "http://127.0.0.1:5000",
-      "ApiKey": "changeme-development-key"
+      "ClientId": "idm-admin",
+      "ClientCertificatePath": "admin-client.pem"
     }
   },
   "Mcp": {
@@ -475,11 +495,15 @@ Hooks run automatically on `git commit`:
 Override via environment variables for deployment:
 
 ```bash
-AdminApi__ApiKey=secret \
 ConnectionStrings__Default="Data Source=/data/idm.db" \
 AuthorizationServer__Issuer=https://issuer.example.test \
+AuthorizationServer__Audience=idm-demo-mcp \
+AuthorizationServer__SigningKeyPath=/keys/signing-key.json \
+ScimAdmin__SeedClientId=idm-admin \
+ScimAdmin__SeedCertPath=/keys/admin-client.pem \
 IdmApiInstances__local__BaseUrl=https://issuer.example.test \
-IdmApiInstances__local__ApiKey=secret \
+IdmApiInstances__local__ClientId=idm-admin \
+IdmApiInstances__local__ClientCertificatePath=/keys/admin-client.pem \
 dotnet run
 ```
 

@@ -27,7 +27,7 @@ source "$SCRIPT_DIR/lib/mcp-demo-helpers.sh"
 cleanup_mcp_audit_user() {
     if [ -n "${AUDIT_USER_ID:-}" ]; then
         do_request "Delete MCP audit demo user" DELETE "$API/scim/v2/Users/$AUDIT_USER_ID" \
-            -H "Authorization: Bearer \$ADMIN_TOKEN"
+            -H "Authorization: Bearer $ADMIN_TOKEN"
         if [ "$_STATUS" -eq 204 ] || [ "$_STATUS" -eq 404 ]; then
             echo "  OK   MCP audit demo user cleanup (HTTP $_STATUS)"
             pass=$((pass + 1))
@@ -98,7 +98,7 @@ echo "  - McpToolSucceeded"
 echo ""
 
 do_request "Create disposable audit demo user" POST "$API/scim/v2/Users" \
-    -H "Authorization: Bearer \$ADMIN_TOKEN" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
     -H "Content-Type: application/scim+json" \
     -d "{\"userName\":\"$AUDIT_USER_NAME\",\"displayName\":\"MCP Audit Demo\",\"active\":true}"
 check "POST /scim/v2/Users audit demo user -> 201" 201 "$_STATUS" "$_BODY"
