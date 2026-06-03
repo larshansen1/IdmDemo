@@ -99,7 +99,8 @@ public sealed class ScimAdminSeederTests
             builder.UseSetting("ScimAdmin:GenerateCertIfMissing", this._generateCertIfMissing.ToString());
             builder.UseSetting("AuthorizationServer:Issuer", "https://idmdemo.test");
             builder.UseSetting("AuthorizationServer:Audience", "idm-demo-api");
-            builder.UseSetting("AuthorizationServer:AccessTokenLifetimeSeconds", "3600");
+            builder.UseSetting("AuthorizationServer:AccessTokenLifetimeSeconds", "300");
+            builder.UseSetting("AuthorizationServer:RequireDpop", "false");
             builder.UseSetting("AuthorizationServer:SigningKeyPath", this._signingKeyPath);
             builder.UseSetting("AuthorizationServer:EnableForwardedClientCertificate", "true");
             builder.UseSetting("AuthorizationServer:ForwardedClientCertificateHeader", "X-Client-Cert");

@@ -351,6 +351,7 @@ public sealed class AuthorizationServerServiceTests
                 Issuer = "https://issuer.test",
                 Audience = "api://default",
                 AccessTokenLifetimeSeconds = 3600,
+                RequireDpop = false,
             },
             repository ?? Substitute.For<IMachineClientRepository>(),
             certificateRepository ?? Substitute.For<IMachineClientCertificateRepository>(),
