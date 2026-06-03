@@ -8,8 +8,9 @@ set -euo pipefail
 #   -v / --verbose   Print full request and response for every call.
 #
 #   Environment overrides:
-#     API_BASE_URL   default: http://localhost:5000
-#     API_KEY        default: changeme-development-key
+#     API_BASE_URL       default: http://localhost:5000
+#     ADMIN_CLIENT_ID    default: idm-admin
+#     ADMIN_CERT_PATH    default: admin-client.pem  (PEM cert+key for scim.admin client)
 
 VERBOSE=0
 for arg in "$@"; do
@@ -23,7 +24,9 @@ for arg in "$@"; do
 done
 
 API="${API_BASE_URL:-http://localhost:5000}"
-KEY="${API_KEY:-changeme-development-key}"
+ADMIN_CLIENT_ID="${ADMIN_CLIENT_ID:-idm-admin}"
+ADMIN_CERT_PATH="${ADMIN_CERT_PATH:-admin-client.pem}"
+ADMIN_TOKEN=""
 
 # Unique suffix so the script is idempotent against a persistent DB
 TS=$(date +%s)
@@ -103,6 +106,20 @@ json_field() {
     python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('$1',''))" 2>/dev/null || echo ""
 }
 
+acquire_admin_token() {
+    [ -f "$ADMIN_CERT_PATH" ] || { echo "ERROR: ADMIN_CERT_PATH='$ADMIN_CERT_PATH' not found." >&2; exit 1; }
+    local cert_b64
+    cert_b64=$(openssl x509 -in "$ADMIN_CERT_PATH" -outform DER | base64 | tr -d '\n')
+    local body
+    body=$(curl -sS -X POST "$API/connect/token" \
+        -H "X-Client-Cert: $cert_b64" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        --data-urlencode "grant_type=client_credentials" \
+        --data-urlencode "client_id=$ADMIN_CLIENT_ID")
+    ADMIN_TOKEN=$(echo "$body" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])' 2>/dev/null || true)
+    [ -n "$ADMIN_TOKEN" ] || { echo "ERROR: Failed to acquire admin token. Response: $body" >&2; exit 1; }
+}
+
 header() {
     echo ""
     echo "──────────────────────────────────────────"
@@ -110,25 +127,30 @@ header() {
     echo "──────────────────────────────────────────"
 }
 
-auth_h=(-H "X-Api-Key: $KEY")
 ct_h=(-H "Content-Type: application/scim+json")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 echo "IdmDemo API demo"
-echo "Base URL : $API"
-echo "API key  : $KEY"
+echo "Base URL       : $API"
+echo "Admin client   : $ADMIN_CLIENT_ID"
+echo "Admin cert     : $ADMIN_CERT_PATH"
 [ "$VERBOSE" -eq 1 ] && echo "Mode     : verbose"
+
+acquire_admin_token
+auth_h=(-H "Authorization: Bearer $ADMIN_TOKEN")
+echo "Admin token    : acquired"
+echo ""
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 header "Authentication"
 
 do_request GET /scim/v2/Users
-check "No API key → 401" 401 "$_STATUS" "$_BODY"
+check "No token → 401" 401 "$_STATUS" "$_BODY"
 
-do_request GET /scim/v2/Users -H "X-Api-Key: wrong-key"
-check "Wrong API key → 401" 401 "$_STATUS" "$_BODY"
+do_request GET /scim/v2/Users -H "Authorization: Bearer invalid.token.here"
+check "Invalid token → 401" 401 "$_STATUS" "$_BODY"
 
 # ── Users — create ────────────────────────────────────────────────────────────
 

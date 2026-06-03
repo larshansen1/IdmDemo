@@ -29,7 +29,7 @@ source "$SCRIPT_DIR/lib/mcp-demo-helpers.sh"
 cleanup_workflow_client() {
     if [ -n "${WORKFLOW_CLIENT_RECORD_ID:-}" ]; then
         do_request "Delete workflow target client" DELETE "$API/scim/v2/Clients/$WORKFLOW_CLIENT_RECORD_ID" \
-            -H "X-Api-Key: $KEY"
+            -H "Authorization: Bearer $ADMIN_TOKEN"
         if [ "$_STATUS" -eq 204 ] || [ "$_STATUS" -eq 404 ]; then
             echo "  OK   Workflow target client cleanup (HTTP $_STATUS)"
             pass=$((pass + 1))
@@ -76,7 +76,7 @@ ensure_demo_role() {
     local role="$1"
 
     do_request "Create role $role" POST "$API/scim/v2/Roles" \
-        -H "X-Api-Key: $KEY" \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
         -H "Content-Type: application/scim+json" \
         -d "{\"value\":\"$role\",\"displayName\":\"$role\",\"active\":true}"
 
@@ -110,10 +110,16 @@ INITIALIZE_PAYLOAD='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"pro
 TOOLS_PAYLOAD='{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 
 echo "IdmDemo MCP Phase 5 workflow demo"
-echo "API URL : $API"
-echo "MCP URL : $MCP"
-echo "Profile : LocalHostedDevelopment"
+echo "API URL      : $API"
+echo "MCP URL      : $MCP"
+echo "Admin client : $ADMIN_CLIENT_ID"
+echo "Profile      : LocalHostedDevelopment"
 [ "$VERBOSE" -eq 1 ] && echo "Mode    : verbose"
+
+header "Admin token"
+acquire_admin_token
+echo "  OK   Acquired scim.admin bearer token for '$ADMIN_CLIENT_ID'"
+echo ""
 
 header "Health and access setup"
 do_request "MCP readiness" GET "$MCP/health/ready"

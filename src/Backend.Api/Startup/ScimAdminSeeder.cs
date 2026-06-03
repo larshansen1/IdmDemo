@@ -55,11 +55,37 @@ public sealed partial class ScimAdminSeeder : IHostedService
     [LoggerMessage(Level = LogLevel.Information, Message = "Registered certificate (thumbprint {Thumbprint}) for '{ClientId}'.")]
     private static partial void LogCertRegistered(ILogger logger, string thumbprint, string clientId);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Generated self-signed certificate for '{ClientId}' at '{Path}'.")]
+    private static partial void LogCertGenerated(ILogger logger, string clientId, string path);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "ScimAdmin:SeedCertPath '{Path}' does not exist; skipping cert registration.")]
     private static partial void LogCertNotFound(ILogger logger, string path);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to load seed certificate from '{Path}'.")]
     private static partial void LogCertLoadFailed(ILogger logger, Exception ex, string path);
+
+    private static void GenerateSelfSignedCertPem(string subjectName, string outputPath)
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest(
+            $"CN={subjectName}",
+            rsa,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+
+        using var cert = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-5),
+            DateTimeOffset.UtcNow.AddYears(1));
+
+        var pem = cert.ExportCertificatePem() + "\n" + rsa.ExportRSAPrivateKeyPem();
+        var dir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        File.WriteAllText(outputPath, pem);
+    }
 
     private async Task EnsureRoleExistsAsync(AppDbContext db, CancellationToken cancellationToken)
     {
@@ -103,8 +129,16 @@ public sealed partial class ScimAdminSeeder : IHostedService
 
         if (!File.Exists(certPath))
         {
-            LogCertNotFound(this._logger, certPath);
-            return;
+            if (this._configuration.GetValue<bool>("ScimAdmin:GenerateCertIfMissing"))
+            {
+                GenerateSelfSignedCertPem(seedClientId, certPath);
+                LogCertGenerated(this._logger, seedClientId, certPath);
+            }
+            else
+            {
+                LogCertNotFound(this._logger, certPath);
+                return;
+            }
         }
 
         try

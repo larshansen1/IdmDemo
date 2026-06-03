@@ -4,9 +4,11 @@ PROTOCOL_VERSION="${PROTOCOL_VERSION:-2025-06-18}"
 API="${API_BASE_URL:-http://localhost:5000}"
 AUTH="${AUTH_BASE_URL:-$API}"
 MCP="${MCP_BASE_URL:-http://localhost:5100}"
-KEY="${API_KEY:-changeme-development-key}"
 MCP_AUDIENCE="${MCP_AUDIENCE:-idm-demo-mcp}"
 AUTH_DPOP="${AUTH_DPOP_BASE_URL:-$AUTH}"
+ADMIN_CLIENT_ID="${ADMIN_CLIENT_ID:-idm-admin}"
+ADMIN_CERT_PATH="${ADMIN_CERT_PATH:-admin-client.pem}"
+ADMIN_TOKEN=""
 
 WORKDIR="${WORKDIR:-$(mktemp -d)}"
 BODY_FILE="$WORKDIR/body.txt"
@@ -273,6 +275,40 @@ else:
 '
 }
 
+acquire_admin_token() {
+    if [ -z "$ADMIN_CERT_PATH" ] || [ ! -f "$ADMIN_CERT_PATH" ]; then
+        echo "  ERROR Cannot acquire admin token: ADMIN_CERT_PATH='$ADMIN_CERT_PATH' not found." >&2
+        echo "  Hint: start Backend.Api with ScimAdmin:SeedClientId and ScimAdmin:GenerateCertIfMissing=true" >&2
+        echo "        then set ADMIN_CERT_PATH to the generated cert path (default: admin-client.pem)." >&2
+        exit 1
+    fi
+
+    local cert_b64
+    cert_b64=$(openssl x509 -in "$ADMIN_CERT_PATH" -outform DER | base64 | tr -d '\n')
+
+    local status body
+    body=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$AUTH/connect/token" \
+        -H "X-Client-Cert: $cert_b64" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        --data-urlencode "grant_type=client_credentials" \
+        --data-urlencode "client_id=$ADMIN_CLIENT_ID" 2>&1) || true
+    status="$body"
+
+    body=$(curl -sS -X POST "$AUTH/connect/token" \
+        -H "X-Client-Cert: $cert_b64" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        --data-urlencode "grant_type=client_credentials" \
+        --data-urlencode "client_id=$ADMIN_CLIENT_ID")
+
+    ADMIN_TOKEN=$(echo "$body" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])' 2>/dev/null || true)
+
+    if [ -z "$ADMIN_TOKEN" ]; then
+        echo "  ERROR Failed to acquire admin token (check that '$ADMIN_CLIENT_ID' is registered with scim.admin role)." >&2
+        echo "  Response: $body" >&2
+        exit 1
+    fi
+}
+
 generate_client_certificate() {
     local client_id="$1"
 
@@ -297,7 +333,7 @@ ensure_scope() {
     local scope="$1"
 
     do_request "Create scope $scope" POST "$API/scim/v2/Scopes" \
-        -H "X-Api-Key: $KEY" \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
         -H "Content-Type: application/scim+json" \
         -d "{\"value\":\"$scope\",\"displayName\":\"$scope\",\"active\":true}"
 
@@ -317,7 +353,7 @@ create_mcp_demo_client() {
 
     generate_client_certificate "$client_id"
     do_request "Create MCP demo client" POST "$API/scim/v2/Clients" \
-        -H "X-Api-Key: $KEY" \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
         -H "Content-Type: application/scim+json" \
         -d "{\"clientId\":\"$client_id\",\"displayName\":\"$display_name\",\"active\":true,\"certificateThumbprintSha256\":\"$CLIENT_CERT_THUMBPRINT\",\"certificateSubject\":\"CN=$client_id\",\"assignedScopes\":[\"idm.mcp.read\",\"idm.mcp.write\",\"idm.mcp.destructive\",\"idm.mcp.certificates\"],\"assignedRoles\":[]}"
     check "POST /scim/v2/Clients -> 201" 201 "$_STATUS" "$_BODY"
@@ -327,7 +363,7 @@ create_mcp_demo_client() {
 cleanup_mcp_demo_client() {
     if [ -n "${CLIENT_RECORD_ID:-}" ]; then
         do_request "Delete MCP demo client" DELETE "$API/scim/v2/Clients/$CLIENT_RECORD_ID" \
-            -H "X-Api-Key: $KEY"
+            -H "Authorization: Bearer $ADMIN_TOKEN"
         check "DELETE /scim/v2/Clients/{id} -> 204" 204 "$_STATUS" "$_BODY"
     fi
 }
