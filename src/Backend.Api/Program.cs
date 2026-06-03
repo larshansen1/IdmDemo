@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using Backend.Api.Extensions;
 using Backend.Api.Middleware;
 using Backend.Api.Services;
@@ -5,6 +6,7 @@ using Backend.Api.Startup;
 using Backend.Application.Extensions;
 using Backend.Application.Models.Auth;
 using Backend.Infrastructure.Extensions;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi.Models;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -52,6 +54,29 @@ builder.Services.AddInfrastructure(connectionString, signingKeyPath, certificate
 builder.Services.AddApplication(authorizationServerOptions);
 builder.Services.AddSingleton<IClientCertificateReader, ClientCertificateReader>();
 
+var tokenRateLimitSection = builder.Configuration.GetSection("RateLimiting:TokenEndpoint");
+var tokenRateLimitPermitLimit = tokenRateLimitSection.GetValue("PermitLimit", 60);
+var tokenRateLimitWindowSeconds = tokenRateLimitSection.GetValue("WindowSeconds", 60);
+var tokenRateLimitSegmentsPerWindow = tokenRateLimitSection.GetValue("SegmentsPerWindow", 4);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("token-endpoint-per-ip", httpContext =>
+    {
+        var remoteIpAddress = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetSlidingWindowLimiter(
+            remoteIpAddress,
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = tokenRateLimitPermitLimit,
+                Window = TimeSpan.FromSeconds(tokenRateLimitWindowSeconds),
+                SegmentsPerWindow = tokenRateLimitSegmentsPerWindow,
+                QueueLimit = 0,
+            });
+    });
+});
+
 builder.Services.AddExceptionHandler<ScimExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddHostedService<ScimAdminSeeder>();
@@ -75,6 +100,7 @@ if (app.Environment.IsDevelopment())
 app.UseExceptionHandler();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseRateLimiter();
 app.UseMiddleware<ScimOAuthMiddleware>();
 
 app.MapControllers();

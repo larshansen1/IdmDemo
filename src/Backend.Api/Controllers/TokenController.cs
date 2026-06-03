@@ -3,6 +3,7 @@ using Backend.Api.Services;
 using Backend.Application.Models.Auth;
 using Backend.Application.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Backend.Api.Controllers;
 
@@ -26,9 +27,11 @@ public sealed class TokenController : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting("token-endpoint-per-ip")]
     [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(OAuthErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(OAuthErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> CreateAsync(
         [FromForm] TokenFormRequest request,
         CancellationToken cancellationToken)
