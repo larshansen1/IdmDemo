@@ -456,8 +456,8 @@ Hooks run automatically on `git commit`:
   "AuthorizationServer": {
     "Issuer": "https://idmdemo.test",
     "Audience": "idm-demo-mcp",
-    "AccessTokenLifetimeSeconds": 3600,
-    "RequireDpop": false,
+    "AccessTokenLifetimeSeconds": 300,
+    "RequireDpop": true,
     "DpopProofLifetimeSeconds": 300,
     "DpopReplayCacheSeconds": 300,
     "DpopSupportedAlgorithms": [ "ES256", "RS256" ],
@@ -472,6 +472,8 @@ Hooks run automatically on `git commit`:
   }
 }
 ```
+
+`RequireDpop` should stay enabled outside local bearer-token smoke tests. Bearer tokens are intentionally not replay-protected per request; DPoP sender-constrains the access token and the 300-second default lifetime keeps any explicitly enabled bearer fallback short-lived.
 
 `Backend.Mcp` is configured through environment variables or configuration providers:
 
