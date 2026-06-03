@@ -8,8 +8,9 @@ set -euo pipefail
 #   -v / --verbose   Print full request and response for every call.
 #
 #   Environment overrides:
-#     API_BASE_URL   default: http://localhost:5000
-#     API_KEY        default: changeme-development-key
+#     API_BASE_URL       default: http://localhost:5000
+#     ADMIN_CLIENT_ID    default: idm-admin
+#     ADMIN_CERT_PATH    default: admin-client.pem  (PEM cert+key for scim.admin client)
 
 VERBOSE=0
 for arg in "$@"; do
@@ -23,7 +24,9 @@ for arg in "$@"; do
 done
 
 API="${API_BASE_URL:-http://localhost:5000}"
-KEY="${API_KEY:-changeme-development-key}"
+ADMIN_CLIENT_ID="${ADMIN_CLIENT_ID:-idm-admin}"
+ADMIN_CERT_PATH="${ADMIN_CERT_PATH:-admin-client.pem}"
+ADMIN_TOKEN=""
 
 TS=$(date +%s)
 ROLE_ACTIVE="service-admin-${TS}"
@@ -175,13 +178,26 @@ header() {
     echo "──────────────────────────────────────────"
 }
 
-auth_h=(-H "X-Api-Key: $KEY")
 scim_ct_h=(-H "Content-Type: application/scim+json")
 
 echo "IdmDemo access management demo"
-echo "Base URL : $API"
-echo "API key  : $KEY"
+echo "Base URL     : $API"
+echo "Admin client : $ADMIN_CLIENT_ID"
+echo "Admin cert   : $ADMIN_CERT_PATH"
 [ "$VERBOSE" -eq 1 ] && echo "Mode     : verbose"
+
+[ -f "$ADMIN_CERT_PATH" ] || { echo "ERROR: ADMIN_CERT_PATH='$ADMIN_CERT_PATH' not found." >&2; exit 1; }
+_admin_cert_b64=$(openssl x509 -in "$ADMIN_CERT_PATH" -outform DER | base64 | tr -d '\n')
+_admin_resp=$(curl -sS -X POST "$API/connect/token" \
+    -H "X-Client-Cert: $_admin_cert_b64" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "grant_type=client_credentials" \
+    --data-urlencode "client_id=$ADMIN_CLIENT_ID")
+ADMIN_TOKEN=$(echo "$_admin_resp" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])' 2>/dev/null || true)
+[ -n "$ADMIN_TOKEN" ] || { echo "ERROR: Failed to acquire admin token." >&2; exit 1; }
+auth_h=(-H "Authorization: Bearer $ADMIN_TOKEN")
+echo "Admin token  : acquired"
+echo ""
 
 header "Create global role catalog"
 

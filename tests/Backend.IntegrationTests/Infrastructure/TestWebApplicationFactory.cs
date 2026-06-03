@@ -106,6 +106,7 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>, 
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.UseSetting("ConnectionStrings:Default", $"Data Source={this._dbPath}");
+        builder.UseSetting("ScimAdmin:SeedClientId", string.Empty);
         builder.UseSetting("AuthorizationServer:Issuer", "https://idmdemo.test");
         builder.UseSetting("AuthorizationServer:Audience", "idm-demo-api");
         builder.UseSetting("AuthorizationServer:AccessTokenLifetimeSeconds", "3600");

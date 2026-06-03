@@ -49,6 +49,11 @@ check_contains "Readiness reports HostedProduction" "\"profile\":\"HostedProduct
 check_contains "Readiness reports DPoP required" "\"requireDpop\":true" "$_BODY"
 check_contains "Readiness rejects bearer development mode" "\"allowBearerTokensForDevelopment\":false" "$_BODY"
 
+header "Admin token"
+acquire_admin_token
+echo "  OK   Acquired scim.admin bearer token for '$ADMIN_CLIENT_ID'"
+echo ""
+
 header "Access setup"
 ensure_scope "idm.mcp.read"
 ensure_scope "idm.mcp.write"
