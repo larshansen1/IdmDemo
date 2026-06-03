@@ -280,6 +280,22 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
     }
 
     [Fact]
+    public async Task PostToken_WhenRateLimitExceeded_ReturnsTooManyRequests()
+    {
+        await using var factory = TestWebApplicationFactory.CreateWithTokenRateLimit(permitLimit: 1);
+        using var client = factory.CreateClient();
+
+        using var firstRequest = CreateTokenRequest("rate-limited-client", "orders.read");
+        var firstResponse = await client.SendAsync(firstRequest);
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, firstResponse.StatusCode);
+
+        using var secondRequest = CreateTokenRequest("rate-limited-client", "orders.read");
+        var secondResponse = await client.SendAsync(secondRequest);
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, secondResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task PostToken_RequireDpopWithoutProof_ReturnsInvalidDpopProof()
     {
         await using var factory = TestWebApplicationFactory.CreateRequireDpop();

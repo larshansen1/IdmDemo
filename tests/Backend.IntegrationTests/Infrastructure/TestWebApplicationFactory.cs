@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -25,25 +26,32 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>, 
     private readonly string _signingKeyPath;
     private readonly string _certificateAuthorityPath;
     private readonly bool _requireDpop;
+    private readonly int? _tokenRateLimitPermitLimit;
 
     public TestWebApplicationFactory()
-        : this(requireDpop: false)
+        : this(requireDpop: false, tokenRateLimitPermitLimit: null)
     {
     }
 
-    private TestWebApplicationFactory(bool requireDpop)
+    private TestWebApplicationFactory(bool requireDpop, int? tokenRateLimitPermitLimit)
     {
         this._dbPath = Path.Combine(Path.GetTempPath(), $"idm_test_{Guid.NewGuid():N}.db");
         this._signingKeyPath = Path.Combine(Path.GetTempPath(), $"idm_test_signing_{Guid.NewGuid():N}.json");
         this._certificateAuthorityPath = Path.Combine(Path.GetTempPath(), $"idm_test_ca_{Guid.NewGuid():N}.json");
         this._requireDpop = requireDpop;
+        this._tokenRateLimitPermitLimit = tokenRateLimitPermitLimit;
     }
 
     public string AdminBearerToken { get; private set; } = string.Empty;
 
     public static TestWebApplicationFactory CreateRequireDpop()
     {
-        return new TestWebApplicationFactory(requireDpop: true);
+        return new TestWebApplicationFactory(requireDpop: true, tokenRateLimitPermitLimit: null);
+    }
+
+    public static TestWebApplicationFactory CreateWithTokenRateLimit(int permitLimit)
+    {
+        return new TestWebApplicationFactory(requireDpop: false, tokenRateLimitPermitLimit: permitLimit);
     }
 
     public async Task InitializeAsync()
@@ -115,6 +123,14 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>, 
         builder.UseSetting("AuthorizationServer:EnableForwardedClientCertificate", "true");
         builder.UseSetting("AuthorizationServer:ForwardedClientCertificateHeader", "X-Client-Cert");
         builder.UseSetting("CertificateAuthority:KeyPath", this._certificateAuthorityPath);
+        if (this._tokenRateLimitPermitLimit is int tokenRateLimitPermitLimit)
+        {
+            builder.UseSetting(
+                "RateLimiting:TokenEndpoint:PermitLimit",
+                tokenRateLimitPermitLimit.ToString(CultureInfo.InvariantCulture));
+            builder.UseSetting("RateLimiting:TokenEndpoint:WindowSeconds", "60");
+            builder.UseSetting("RateLimiting:TokenEndpoint:SegmentsPerWindow", "1");
+        }
 
         builder.ConfigureServices(services =>
         {
