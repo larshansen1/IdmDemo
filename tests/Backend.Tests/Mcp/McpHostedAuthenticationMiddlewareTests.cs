@@ -184,13 +184,34 @@ public sealed class McpHostedAuthenticationMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_DevelopmentBearerWithDpopBoundToken_ReturnsUnauthorized()
+    {
+        var tokenValidator = Substitute.For<IAccessTokenValidator>();
+        tokenValidator
+            .ValidateAsync("token", Arg.Any<CancellationToken>())
+            .Returns(CreateValidatedToken(McpScopes.Read, dpopThumbprint: "jkt"));
+
+        var middleware = new McpHostedAuthenticationMiddleware(_ => Task.CompletedTask);
+        var context = CreateContext();
+        context.Request.Headers.Authorization = "Bearer token";
+
+        await middleware.InvokeAsync(
+            context,
+            Options.Create(new McpRuntimeOptions { Profile = McpProfile.LocalHostedDevelopment }),
+            tokenValidator,
+            Substitute.For<IDpopBoundAccessTokenValidator>());
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+    }
+
+    [Fact]
     public async Task InvokeAsync_DevelopmentBearerAllowed_AuthenticatesCaller()
     {
         var nextCalled = false;
         var tokenValidator = Substitute.For<IAccessTokenValidator>();
         tokenValidator
             .ValidateAsync("token", Arg.Any<CancellationToken>())
-            .Returns(CreateValidatedToken(McpScopes.Read));
+            .Returns(CreateValidatedToken(McpScopes.Read, certificateThumbprint: "x5t"));
 
         var middleware = new McpHostedAuthenticationMiddleware(_ =>
         {
@@ -325,14 +346,17 @@ public sealed class McpHostedAuthenticationMiddlewareTests
         return context;
     }
 
-    private static ValidatedAccessToken CreateValidatedToken(string scope, string? certificateThumbprint = null)
+    private static ValidatedAccessToken CreateValidatedToken(
+        string scope,
+        string? certificateThumbprint = null,
+        string? dpopThumbprint = null)
     {
         return new ValidatedAccessToken
         {
             Subject = "subject",
             ClientId = "client",
             Scope = scope,
-            DpopJwkThumbprint = "jkt",
+            DpopJwkThumbprint = dpopThumbprint,
             CertificateThumbprintSha256 = certificateThumbprint,
         };
     }
