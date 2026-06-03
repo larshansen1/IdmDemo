@@ -102,6 +102,9 @@ POST /connect/token
 
 When a token request omits `DPoP`, the server issues a certificate-bound bearer token with `cnf.x5t#S256`. When a request includes a valid `DPoP` proof JWT, the server issues a DPoP-bound token with `token_type=DPoP` and `cnf.jkt`.
 
+Issued access tokens use JWT header `typ: at+jwt`, and validators require that
+type to reduce JWT type-confusion risk.
+
 Swagger UI is available at `/swagger` when running in Development mode.
 
 ---

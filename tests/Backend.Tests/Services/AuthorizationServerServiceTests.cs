@@ -69,6 +69,9 @@ public sealed class AuthorizationServerServiceTests
         Assert.Equal(3600, response.ExpiresIn);
         Assert.Equal("orders.read", response.Scope);
 
+        var header = ReadJwtHeader(response.AccessToken);
+        Assert.Equal("at+jwt", header.GetProperty("typ").GetString());
+
         var payload = ReadJwtPayload(response.AccessToken);
         Assert.Equal("https://issuer.test", payload.GetProperty("iss").GetString());
         Assert.Equal(client.Id.ToString(), payload.GetProperty("sub").GetString());
@@ -401,6 +404,15 @@ public sealed class AuthorizationServerServiceTests
         var parts = jwt.Split('.');
         Assert.Equal(3, parts.Length);
         var json = Encoding.UTF8.GetString(Base64UrlDecode(parts[1]));
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
+    private static JsonElement ReadJwtHeader(string jwt)
+    {
+        var parts = jwt.Split('.');
+        Assert.Equal(3, parts.Length);
+        var json = Encoding.UTF8.GetString(Base64UrlDecode(parts[0]));
         using var document = JsonDocument.Parse(json);
         return document.RootElement.Clone();
     }

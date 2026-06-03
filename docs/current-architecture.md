@@ -77,11 +77,13 @@ default and its certificate is stored in the Docker `idmdemo-keys` volume at
    `POST /connect/token`.
 2. `Backend.Api` validates the certificate thumbprint against the machine-client
    record and optional managed certificate collection.
-3. Without a `DPoP` proof, the token response is a certificate-bound bearer
+3. Issued JWT access tokens use header `typ: at+jwt`, and token validators
+   require that type.
+4. Without a `DPoP` proof, the token response is a certificate-bound bearer
    token with `cnf.x5t#S256`.
-4. With a valid `DPoP` proof, the token response has `token_type=DPoP` and
+5. With a valid `DPoP` proof, the token response has `token_type=DPoP` and
    `cnf.jkt`.
-5. Hosted production MCP accepts only DPoP-bound calls to `/mcp`.
+6. Hosted production MCP accepts only DPoP-bound calls to `/mcp`.
 
 ## Smoke Tests
 

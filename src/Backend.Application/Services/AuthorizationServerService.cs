@@ -208,7 +208,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         var header = new Dictionary<string, object>
         {
             ["alg"] = "RS256",
-            ["typ"] = "JWT",
+            ["typ"] = "at+jwt",
             ["kid"] = key.KeyId,
         };
 

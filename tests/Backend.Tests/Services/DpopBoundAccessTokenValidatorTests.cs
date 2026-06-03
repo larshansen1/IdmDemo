@@ -63,6 +63,21 @@ public sealed class DpopBoundAccessTokenValidatorTests
         Assert.Equal("invalid_token", exception.Error);
     }
 
+    [Fact]
+    public async Task ValidateAsync_AccessTokenWithWrongType_ThrowsInvalidToken()
+    {
+        using var clientCertificate = CreateCertificate();
+        using var dpopKey = RSA.Create(2048);
+        var fixture = CreateFixture();
+        var accessToken = await IssueDpopTokenAsync(fixture, clientCertificate, dpopKey);
+        var wrongTypeToken = ReplaceTokenType(accessToken, fixture.SigningKeyStore.Key, "JWT");
+
+        var exception = await Assert.ThrowsAsync<OAuthException>(() =>
+            fixture.AccessTokenValidator.ValidateAsync(wrongTypeToken));
+
+        Assert.Equal("invalid_token", exception.Error);
+    }
+
     private static TestFixture CreateFixture()
     {
         var options = new AuthorizationServerOptions
@@ -95,6 +110,8 @@ public sealed class DpopBoundAccessTokenValidatorTests
         return new TestFixture(
             clientRepository,
             authorizationServer,
+            accessTokenValidator,
+            signingKeyStore,
             boundValidator);
     }
 
@@ -188,6 +205,31 @@ public sealed class DpopBoundAccessTokenValidatorTests
         return Base64UrlEncode(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalJson)));
     }
 
+    private static string ReplaceTokenType(string accessToken, JwtSigningKey key, string tokenType)
+    {
+        var parts = accessToken.Split('.');
+        Assert.Equal(3, parts.Length);
+
+        var header = new Dictionary<string, object?>
+        {
+            ["alg"] = "RS256",
+            ["typ"] = tokenType,
+            ["kid"] = key.KeyId,
+        };
+        var signingInput = string.Create(
+            null,
+            $"{Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(header))}.{parts[1]}");
+
+        using var rsa = RSA.Create();
+        rsa.ImportParameters(key.Parameters);
+        var signature = rsa.SignData(
+            Encoding.ASCII.GetBytes(signingInput),
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+
+        return string.Create(null, $"{signingInput}.{Base64UrlEncode(signature)}");
+    }
+
     private static string Base64UrlEncode(byte[] bytes)
     {
         return Convert.ToBase64String(bytes)
@@ -199,6 +241,8 @@ public sealed class DpopBoundAccessTokenValidatorTests
     private sealed record TestFixture(
         IMachineClientRepository ClientRepository,
         AuthorizationServerService AuthorizationServer,
+        AccessTokenValidator AccessTokenValidator,
+        TestSigningKeyStore SigningKeyStore,
         DpopBoundAccessTokenValidator BoundValidator);
 
     private sealed class TestSigningKeyStore : IJwtSigningKeyStore
@@ -214,6 +258,8 @@ public sealed class DpopBoundAccessTokenValidatorTests
                 Parameters = rsa.ExportParameters(true),
             };
         }
+
+        public JwtSigningKey Key => this._key;
 
         public Task<JwtSigningKey> GetActiveKeyAsync(CancellationToken cancellationToken = default)
         {

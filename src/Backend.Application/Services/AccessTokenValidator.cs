@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
@@ -111,10 +110,6 @@ public sealed class AccessTokenValidator : IAccessTokenValidator
         throw CreateInvalidTokenException();
     }
 
-    [SuppressMessage(
-        "Security",
-        "CA5404:Do not disable token validation checks",
-        Justification = "The authorization server currently issues JWT access tokens without an explicit typ header.")]
     private static async Task<JsonWebToken> ValidateJwtAsync(
         string accessToken,
         JwtSigningKey key,
@@ -139,7 +134,7 @@ public sealed class AccessTokenValidator : IAccessTokenValidator
             IssuerSigningKey = securityKey,
             ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
             ValidateTokenReplay = false,
-            ValidTypes = null,
+            ValidTypes = ["at+jwt"],
         };
 
         var handler = new JsonWebTokenHandler();
