@@ -116,7 +116,17 @@ public sealed class McpHostedAuthenticationMiddleware
             throw new OAuthException("invalid_token", "Access token is missing or invalid.", StatusCodes.Status401Unauthorized);
         }
 
-        return await accessTokenValidator.ValidateAsync(accessToken, context.RequestAborted).ConfigureAwait(false);
+        var validated = await accessTokenValidator.ValidateAsync(accessToken, context.RequestAborted).ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(validated.DpopJwkThumbprint))
+        {
+            throw new OAuthException(
+                "invalid_token",
+                "DPoP-bound access token must be presented with a DPoP proof, not as a plain Bearer.",
+                StatusCodes.Status401Unauthorized);
+        }
+
+        return validated;
     }
 
     private static ClaimsPrincipal CreatePrincipal(ValidatedAccessToken token, string scheme)
