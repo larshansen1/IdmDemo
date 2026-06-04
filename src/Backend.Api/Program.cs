@@ -5,6 +5,7 @@ using Backend.Api.Services;
 using Backend.Api.Startup;
 using Backend.Application.Extensions;
 using Backend.Application.Models.Auth;
+using Backend.Application.Services;
 using Backend.Infrastructure.Extensions;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi.Models;
@@ -52,6 +53,7 @@ var certificateAuthorityPath = builder.Configuration["CertificateAuthority:KeyPa
 
 builder.Services.AddInfrastructure(connectionString, signingKeyPath, certificateAuthorityPath);
 builder.Services.AddApplication(authorizationServerOptions);
+builder.Services.AddScoped<IDpopReplayCache, PersistentDpopReplayCache>();
 builder.Services.AddSingleton<IClientCertificateReader, ClientCertificateReader>();
 
 var tokenRateLimitSection = builder.Configuration.GetSection("RateLimiting:TokenEndpoint");

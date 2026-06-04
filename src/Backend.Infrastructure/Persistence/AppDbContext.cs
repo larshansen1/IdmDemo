@@ -20,6 +20,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<MachineClientCertificate> MachineClientCertificates { get; set; } = null!;
 
+    public DbSet<DpopReplayEntry> DpopReplayEntries { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -81,6 +83,14 @@ public sealed class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.MachineClientId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DpopReplayEntry>(entity =>
+        {
+            entity.HasKey(e => e.Key);
+            entity.Property(e => e.Key).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ExpiresAtUnixTimeSeconds).IsRequired();
+            entity.HasIndex(e => e.ExpiresAtUnixTimeSeconds);
         });
     }
 }
