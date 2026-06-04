@@ -5,6 +5,8 @@ using Backend.Application.Models.Clients;
 using Backend.Application.Models.Roles;
 using Backend.Application.Models.Scopes;
 using Backend.Application.Models.Users;
+using Backend.Application.Scim;
+using Backend.Domain.Exceptions;
 using Backend.Mcp.Api;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
@@ -17,6 +19,7 @@ public sealed class IdmAdminTools
 {
     private const string _succeeded = "succeeded";
     private const string _failed = "failed";
+    private const int _maxMachineClientFilterLength = 256;
     private static readonly string[] _issuedCertificateNextSteps =
     [
         "Return certificatePem to the caller.",
@@ -24,11 +27,22 @@ public sealed class IdmAdminTools
     ];
 
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly HashSet<string> _allowedMachineClientFilterAttributes = new(StringComparer.Ordinal)
+    {
+        "clientId",
+    };
+
     private static readonly Action<ILogger, string, Exception?> _onboardingFailed =
         LoggerMessage.Define<string>(
             LogLevel.Warning,
             new EventId(6001, nameof(_onboardingFailed)),
             "Machine-client onboarding failed with correlation id {CorrelationId}.");
+
+    private static readonly Action<ILogger, string, string?, Exception?> _machineClientFilterAccepted =
+        LoggerMessage.Define<string, string?>(
+            LogLevel.Information,
+            new EventId(6002, nameof(_machineClientFilterAccepted)),
+            "Machine-client list requested with SCIM filter {Filter} on instance {Instance}.");
 
     private readonly IIdmApiClient _apiClient;
     private readonly IMcpMutationGuard _mutationGuard;
@@ -116,7 +130,7 @@ public sealed class IdmAdminTools
     }
 
     [McpServerTool(Name = "idm_list_machine_clients", ReadOnly = true)]
-    [Description("List machine-client identities. Optional SCIM filter, for example: clientId eq \"orders-service\".")]
+    [Description("List machine-client identities. Optional SCIM filter; only clientId eq \"value\" is allowed.")]
     public async Task<CallToolResult> ListMachineClientsAsync(
         string? filter = null,
         string? instance = null,
@@ -124,8 +138,18 @@ public sealed class IdmAdminTools
     {
         try
         {
-            var result = await this._apiClient.ListClientsAsync(instance, filter, cancellationToken).ConfigureAwait(false);
+            var validatedFilter = ValidateMachineClientFilter(filter);
+            if (validatedFilter is not null)
+            {
+                _machineClientFilterAccepted(this._logger, validatedFilter, instance, null);
+            }
+
+            var result = await this._apiClient.ListClientsAsync(instance, validatedFilter, cancellationToken).ConfigureAwait(false);
             return await this.CreateMachineClientListToolResultAsync(result, instance, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ValidationException exception)
+        {
+            return CreateToolResult(new { error = exception.Message }, true);
         }
         catch (IdmApiException exception)
         {
@@ -676,6 +700,30 @@ public sealed class IdmAdminTools
                 },
             ],
         };
+    }
+
+    private static string? ValidateMachineClientFilter(string? filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter))
+        {
+            return null;
+        }
+
+        var trimmed = filter.Trim();
+        if (trimmed.Length > _maxMachineClientFilterLength)
+        {
+            throw new ValidationException(
+                $"Machine-client filter must be {_maxMachineClientFilterLength} characters or fewer.");
+        }
+
+        var parsed = ScimFilterParser.Parse(trimmed);
+        if (!_allowedMachineClientFilterAttributes.Contains(parsed.AttributeName))
+        {
+            throw new ValidationException(
+                $"Filter on '{parsed.AttributeName}' is not supported. Use 'clientId'.");
+        }
+
+        return trimmed;
     }
 
     private static Dictionary<string, JsonElement> CreateConfirmArguments(bool confirm)

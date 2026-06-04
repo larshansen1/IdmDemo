@@ -167,6 +167,58 @@ public sealed class IdmAdminToolsTests
     }
 
     [Fact]
+    public async Task ListMachineClientsAsync_ClientIdFilter_ForwardsTrimmedFilter()
+    {
+        var apiClient = Substitute.For<IIdmApiClient>();
+        apiClient.ListClientsAsync(null, "clientId eq \"order-agent\"", Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<ScimListResponse<ClientResponse>>(
+                "local",
+                "list-client-correlation",
+                new ScimListResponse<ClientResponse>()));
+        var tools = CreateTools(apiClient);
+
+        var result = await tools.ListMachineClientsAsync("  clientId eq \"order-agent\"  ");
+
+        Assert.False(result.IsError);
+        await apiClient.Received(1)
+            .ListClientsAsync(null, "clientId eq \"order-agent\"", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ListMachineClientsAsync_UnsupportedFilterAttribute_ReturnsToolErrorBeforeApiCall()
+    {
+        var apiClient = Substitute.For<IIdmApiClient>();
+        var tools = CreateTools(apiClient);
+
+        var result = await tools.ListMachineClientsAsync("active eq \"false\"");
+
+        Assert.True(result.IsError);
+        Assert.Contains(
+            result.Content,
+            content => content.ToString()!.Contains("active", StringComparison.Ordinal)
+                && content.ToString()!.Contains("not supported", StringComparison.Ordinal));
+        await apiClient.DidNotReceiveWithAnyArgs()
+            .ListClientsAsync(default, default, default);
+    }
+
+    [Fact]
+    public async Task ListMachineClientsAsync_MalformedFilter_ReturnsToolErrorBeforeApiCall()
+    {
+        var apiClient = Substitute.For<IIdmApiClient>();
+        var tools = CreateTools(apiClient);
+
+        var result = await tools.ListMachineClientsAsync("clientId co \"order\"");
+
+        Assert.True(result.IsError);
+        Assert.Contains(
+            result.Content,
+            content => content.ToString()!.Contains("attributeName eq", StringComparison.Ordinal)
+                && content.ToString()!.Contains("is supported", StringComparison.Ordinal));
+        await apiClient.DidNotReceiveWithAnyArgs()
+            .ListClientsAsync(default, default, default);
+    }
+
+    [Fact]
     public async Task ListClientCertificatesAsync_ExternalClientId_ResolvesRecordId()
     {
         var apiClient = Substitute.For<IIdmApiClient>();
