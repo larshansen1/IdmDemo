@@ -27,12 +27,12 @@ public sealed class McpToolAuditContextFactory
         IDictionary<string, JsonElement>? arguments,
         McpToolPolicy? policy)
     {
-        var caller = this._httpContextAccessor.HttpContext?.Items[typeof(McpCallerContext)] as McpCallerContext;
+        var caller = this.GetCallerContext();
         return new McpToolAuditContext(
             toolName,
-            caller?.Subject,
-            caller?.ClientId,
-            (IReadOnlyList<string>?)caller?.Scopes ?? [],
+            ReadSubject(caller),
+            ReadClientId(caller),
+            ReadScopes(caller),
             ReadInstance(arguments) ?? this._runtimeOptions.DefaultInstance,
             ReadString(arguments, "id") ?? ReadString(arguments, "clientId"),
             ReadString(arguments, "certificateId"),
@@ -43,6 +43,13 @@ public sealed class McpToolAuditContextFactory
             policy?.Destructive ?? false,
             policy?.RequiresCertificateScope ?? false);
     }
+
+    private static string? ReadSubject(McpCallerContext? caller) => caller?.Subject;
+
+    private static string? ReadClientId(McpCallerContext? caller) => caller?.ClientId;
+
+    private static IReadOnlyList<string> ReadScopes(McpCallerContext? caller) =>
+        caller?.Scopes ?? [];
 
     private static bool? ReadConfirm(IDictionary<string, JsonElement>? arguments)
     {
@@ -78,4 +85,7 @@ public sealed class McpToolAuditContextFactory
             _ => null,
         };
     }
+
+    private McpCallerContext? GetCallerContext() =>
+        this._httpContextAccessor.HttpContext?.Items[typeof(McpCallerContext)] as McpCallerContext;
 }
