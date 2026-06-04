@@ -58,6 +58,7 @@ public sealed class McpHostedAuthenticationMiddleware
                     runtimeSettings)
                     .ConfigureAwait(false);
 
+            context.Items[typeof(McpCallerContext)] = CreateCallerContext(validatedToken);
             context.User = CreatePrincipal(validatedToken, scheme);
             await this._next(context).ConfigureAwait(false);
         }
@@ -127,6 +128,16 @@ public sealed class McpHostedAuthenticationMiddleware
         }
 
         return validated;
+    }
+
+    private static McpCallerContext CreateCallerContext(ValidatedAccessToken token)
+    {
+        var scopes = token.Scope
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToArray();
+        return new McpCallerContext(token.Subject, token.ClientId, scopes);
     }
 
     private static ClaimsPrincipal CreatePrincipal(ValidatedAccessToken token, string scheme)

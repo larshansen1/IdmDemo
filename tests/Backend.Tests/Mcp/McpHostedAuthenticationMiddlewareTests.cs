@@ -154,6 +154,11 @@ public sealed class McpHostedAuthenticationMiddlewareTests
         Assert.True(nextCalled);
         Assert.True(context.User.Identity?.IsAuthenticated);
         Assert.Contains(context.User.FindAll("scope"), claim => claim.Value == McpScopes.Read);
+        var callerContext = context.Items[typeof(McpCallerContext)] as McpCallerContext;
+        Assert.NotNull(callerContext);
+        Assert.Equal("subject", callerContext.Subject);
+        Assert.Equal("client", callerContext.ClientId);
+        Assert.Contains(McpScopes.Read, callerContext.Scopes);
     }
 
     [Fact]
@@ -236,6 +241,10 @@ public sealed class McpHostedAuthenticationMiddlewareTests
         Assert.Empty(context.User.FindAll("X-Api-Key"));
         Assert.Empty(context.User.FindAll("x-api-key"));
         await tokenValidator.Received(1).ValidateAsync("token", Arg.Any<CancellationToken>());
+        var callerContext = context.Items[typeof(McpCallerContext)] as McpCallerContext;
+        Assert.NotNull(callerContext);
+        Assert.Equal("subject", callerContext.Subject);
+        Assert.Equal("client", callerContext.ClientId);
     }
 
     [Fact]

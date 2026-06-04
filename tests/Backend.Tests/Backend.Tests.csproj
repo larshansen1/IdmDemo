@@ -4,6 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <RootNamespace>Backend.Tests</RootNamespace>
+    <!-- Backend.Infrastructure is a transitive dependency via Backend.Mcp but has no unit tests here.
+         It is covered at 80%+ by Backend.IntegrationTests which runs against a real database. -->
+    <Exclude>[Backend.Infrastructure]*</Exclude>
   </PropertyGroup>
 
   <ItemGroup>

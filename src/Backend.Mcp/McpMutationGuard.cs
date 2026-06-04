@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
@@ -68,20 +67,12 @@ public sealed class McpMutationGuard : IMcpMutationGuard
             && value.ValueKind == JsonValueKind.True;
     }
 
-    private static void RequireScope(ClaimsPrincipal user, string scope)
+    private static void RequireScope(McpCallerContext caller, string scope)
     {
-        if (ReadScopes(user).Contains(scope, StringComparer.Ordinal))
+        if (!caller.HasScope(scope))
         {
-            return;
+            throw new McpToolException($"Hosted MCP caller requires scope '{scope}'.");
         }
-
-        throw new McpToolException($"Hosted MCP caller requires scope '{scope}'.");
-    }
-
-    private static IEnumerable<string> ReadScopes(ClaimsPrincipal user)
-    {
-        return user.FindAll("scope")
-            .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     private void EnsureLocalToolAllowed(McpToolPolicy policy, IDictionary<string, JsonElement>? arguments)
@@ -100,32 +91,32 @@ public sealed class McpMutationGuard : IMcpMutationGuard
 
     private void EnsureHostedToolAllowed(McpToolPolicy policy, IDictionary<string, JsonElement>? arguments)
     {
-        var user = this._httpContextAccessor.HttpContext?.User;
-        if (user?.Identity?.IsAuthenticated != true)
+        var caller = this._httpContextAccessor.HttpContext?.Items[typeof(McpCallerContext)] as McpCallerContext;
+        if (caller is null)
         {
             throw new McpToolException("Hosted MCP caller is not authenticated.");
         }
 
         if (policy.ReadOnly)
         {
-            RequireScope(user, McpScopes.Read);
+            RequireScope(caller, McpScopes.Read);
             return;
         }
 
         if (policy.Destructive)
         {
             this.EnsureDestructiveAllowed(ReadConfirm(arguments));
-            RequireScope(user, McpScopes.Destructive);
+            RequireScope(caller, McpScopes.Destructive);
         }
         else
         {
             this.EnsureMutationAllowed();
-            RequireScope(user, McpScopes.Write);
+            RequireScope(caller, McpScopes.Write);
         }
 
         if (policy.RequiresCertificateScope)
         {
-            RequireScope(user, McpScopes.Certificates);
+            RequireScope(caller, McpScopes.Certificates);
         }
     }
 }

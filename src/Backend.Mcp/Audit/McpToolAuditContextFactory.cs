@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
@@ -28,12 +27,12 @@ public sealed class McpToolAuditContextFactory
         IDictionary<string, JsonElement>? arguments,
         McpToolPolicy? policy)
     {
-        var user = this._httpContextAccessor.HttpContext?.User;
+        var caller = this._httpContextAccessor.HttpContext?.Items[typeof(McpCallerContext)] as McpCallerContext;
         return new McpToolAuditContext(
             toolName,
-            ReadClaim(user, "sub", ClaimTypes.NameIdentifier),
-            ReadClaim(user, "client_id"),
-            ReadScopes(user),
+            caller?.Subject,
+            caller?.ClientId,
+            (IReadOnlyList<string>?)caller?.Scopes ?? [],
             ReadInstance(arguments) ?? this._runtimeOptions.DefaultInstance,
             ReadString(arguments, "id") ?? ReadString(arguments, "clientId"),
             ReadString(arguments, "certificateId"),
@@ -78,38 +77,5 @@ public sealed class McpToolAuditContextFactory
             JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.ToString(),
             _ => null,
         };
-    }
-
-    private static string? ReadClaim(ClaimsPrincipal? user, params string[] claimTypes)
-    {
-        if (user is null)
-        {
-            return null;
-        }
-
-        foreach (var claimType in claimTypes)
-        {
-            var value = user.FindFirst(claimType)?.Value;
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
-
-    private static string[] ReadScopes(ClaimsPrincipal? user)
-    {
-        if (user is null)
-        {
-            return [];
-        }
-
-        return user.FindAll("scope")
-            .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
     }
 }
