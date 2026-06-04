@@ -418,6 +418,19 @@ if [ "$VERBOSE" -eq 0 ]; then
     echo ""
 fi
 
+header "DPoP replay protection"
+
+do_request POST /connect/token \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -H "X-Client-Cert: $CERT_DER_BASE64" \
+    -H "DPoP: $DPOP_PROOF" \
+    --data-urlencode "grant_type=client_credentials" \
+    --data-urlencode "client_id=$CLIENT_ID" \
+    --data-urlencode "scope=orders.read"
+check "Reusing the same DPoP proof is rejected → 400" 400 "$_STATUS" "$_BODY"
+ERROR_CODE=$(echo "$_BODY" | json_field error)
+check_value "Replayed proof returns invalid_dpop_proof" "invalid_dpop_proof" "$ERROR_CODE"
+
 header "OAuth error behavior"
 
 do_request POST /connect/token \
