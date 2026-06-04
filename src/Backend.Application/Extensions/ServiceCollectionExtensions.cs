@@ -1,6 +1,7 @@
 using Backend.Application.Models.Auth;
 using Backend.Application.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Backend.Application.Extensions;
 
@@ -14,7 +15,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMachineClientService, MachineClientService>();
         services.AddScoped<IMachineClientCertificateService, MachineClientCertificateService>();
-        services.AddSingleton<IDpopReplayCache, InMemoryDpopReplayCache>();
+        services.TryAddSingleton<IDpopReplayCache, InMemoryDpopReplayCache>();
         services.AddScoped<IDpopProofValidator, DpopProofValidator>();
         services.AddScoped<IAccessTokenValidator, AccessTokenValidator>();
         services.AddScoped<IDpopBoundAccessTokenValidator, DpopBoundAccessTokenValidator>();
@@ -35,7 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMachineClientService, MachineClientService>();
         services.AddScoped<IMachineClientCertificateService, MachineClientCertificateService>();
-        services.AddSingleton<IDpopReplayCache, InMemoryDpopReplayCache>();
+        services.TryAddSingleton<IDpopReplayCache, InMemoryDpopReplayCache>();
         services.AddScoped<IDpopProofValidator, DpopProofValidator>();
         services.AddScoped<IAccessTokenValidator, AccessTokenValidator>();
         services.AddScoped<IDpopBoundAccessTokenValidator, DpopBoundAccessTokenValidator>();
