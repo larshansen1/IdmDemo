@@ -12,4 +12,7 @@ public sealed class TokenFormRequest
 
     [FromForm(Name = "scope")]
     public string? Scope { get; init; }
+
+    [FromForm(Name = "resource")]
+    public string? Resource { get; init; }
 }

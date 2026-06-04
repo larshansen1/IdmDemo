@@ -15,5 +15,6 @@ public interface IAuthorizationServerService
         string? scope,
         X509Certificate2? clientCertificate,
         string? dpopProofJwt = null,
+        string? resource = null,
         CancellationToken cancellationToken = default);
 }

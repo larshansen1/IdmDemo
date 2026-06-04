@@ -83,6 +83,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         string? scope,
         X509Certificate2? clientCertificate,
         string? dpopProofJwt = null,
+        string? resource = null,
         CancellationToken cancellationToken = default)
     {
         ValidateGrantType(grantType);
@@ -91,9 +92,11 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         var activeAssignedScopes = await this.ResolveActiveAssignedScopesAsync(client, cancellationToken).ConfigureAwait(false);
         var activeAssignedRoles = await this.ResolveActiveAssignedRolesAsync(client, cancellationToken).ConfigureAwait(false);
         var grantedScopes = ResolveGrantedScopes(scope, activeAssignedScopes);
+        var audience = this.ResolveAudience(resource, activeAssignedScopes);
         var token = await this.CreateJwtAsync(
             client,
             clientCertificate!,
+            audience,
             grantedScopes,
             activeAssignedRoles,
             dpopProof?.JwkThumbprint,
@@ -219,6 +222,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         AuthorizationServerOptions options,
         MachineClient client,
         X509Certificate2 certificate,
+        string audience,
         IReadOnlyList<string> grantedScopes,
         IReadOnlyList<string> activeAssignedRoles,
         string? dpopJwkThumbprint,
@@ -240,7 +244,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             ["iss"] = options.Issuer,
             ["sub"] = client.Id.ToString(),
             ["client_id"] = client.ClientId,
-            ["aud"] = options.Audience,
+            ["aud"] = audience,
             ["jti"] = Guid.NewGuid().ToString(),
             ["iat"] = now.ToUnixTimeSeconds(),
             ["nbf"] = now.ToUnixTimeSeconds(),
@@ -328,9 +332,36 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             .ConfigureAwait(false);
     }
 
+    private string ResolveAudience(string? requestedResource, IReadOnlyList<string> activeAssignedScopes)
+    {
+        if (string.IsNullOrWhiteSpace(requestedResource))
+        {
+            return this._options.Audience;
+        }
+
+        var resource = requestedResource.Trim();
+        if (string.Equals(resource, this._options.Audience, StringComparison.Ordinal))
+        {
+            return this._options.Audience;
+        }
+
+        var hasMcpScope = activeAssignedScopes
+            .Any(scope => scope.StartsWith(this._options.McpScopePrefix, StringComparison.Ordinal));
+        if (string.Equals(resource, this._options.McpAudience, StringComparison.Ordinal) && hasMcpScope)
+        {
+            return this._options.McpAudience;
+        }
+
+        throw new OAuthException(
+            "invalid_target",
+            "Requested resource is not allowed for this client.",
+            _badRequestStatusCode);
+    }
+
     private async Task<string> CreateJwtAsync(
         MachineClient client,
         X509Certificate2 certificate,
+        string audience,
         IReadOnlyList<string> grantedScopes,
         IReadOnlyList<string> activeAssignedRoles,
         string? dpopJwkThumbprint,
@@ -344,6 +375,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             this._options,
             client,
             certificate,
+            audience,
             grantedScopes,
             activeAssignedRoles,
             dpopJwkThumbprint,

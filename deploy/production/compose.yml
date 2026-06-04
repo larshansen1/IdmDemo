@@ -43,7 +43,8 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Default: Data Source=/data/idm-demo.db
       AuthorizationServer__Issuer: https://auth.idp.madmetal.org
-      AuthorizationServer__Audience: ${MCP_AUDIENCE:-idm-demo-mcp}
+      AuthorizationServer__Audience: ${API_AUDIENCE:-idm-demo-api}
+      AuthorizationServer__McpAudience: ${MCP_AUDIENCE:-idm-demo-mcp}
       AuthorizationServer__SigningKeyPath: /keys/signing-key.json
       AuthorizationServer__EnableForwardedClientCertificate: "true"
       AuthorizationServer__ForwardedClientCertificateHeader: X-Client-Cert

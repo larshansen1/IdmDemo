@@ -6,7 +6,7 @@ set -euo pipefail
 #
 # Expected services:
 #   Backend.Api running with AuthorizationServer__Issuer matching API_BASE_URL
-#     and AuthorizationServer__Audience=idm-demo-mcp
+#     AuthorizationServer__Audience=idm-demo-api, and AuthorizationServer__McpAudience=idm-demo-mcp
 #   Backend.Mcp running with AuthorizationServer__Issuer matching Backend.Api,
 #     Mcp__Profile=LocalHostedDevelopment, and Mcp__Hosted__Audience=idm-demo-mcp
 

@@ -379,7 +379,8 @@ issue_bearer_token() {
         -H "Content-Type: application/x-www-form-urlencoded" \
         --data-urlencode "grant_type=client_credentials" \
         --data-urlencode "client_id=$client_id" \
-        --data-urlencode "scope=$scope"
+        --data-urlencode "scope=$scope" \
+        --data-urlencode "resource=$MCP_AUDIENCE"
     check "POST /connect/token bearer -> 200" 200 "$_STATUS" "$_BODY"
 
     ACCESS_TOKEN=$(echo "$_BODY" | json_field access_token)
@@ -407,7 +408,8 @@ issue_dpop_token() {
         -H "DPoP: $DPOP_TOKEN_PROOF" \
         --data-urlencode "grant_type=client_credentials" \
         --data-urlencode "client_id=$client_id" \
-        --data-urlencode "scope=$scope"
+        --data-urlencode "scope=$scope" \
+        --data-urlencode "resource=$MCP_AUDIENCE"
     check "POST /connect/token DPoP -> 200" 200 "$_STATUS" "$_BODY"
 
     ACCESS_TOKEN=$(echo "$_BODY" | json_field access_token)

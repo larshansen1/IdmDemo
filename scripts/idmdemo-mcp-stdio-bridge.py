@@ -31,6 +31,7 @@ CLIENT_CERT = os.environ["IDMDEMO_CLIENT_CERT"]
 CLIENT_KEY = os.environ["IDMDEMO_CLIENT_KEY"]
 DPOP_KEY = os.environ["IDMDEMO_DPOP_KEY"]
 SCOPE = os.environ.get("IDMDEMO_SCOPE", "idm.mcp.read")
+AUDIENCE = os.environ.get("IDMDEMO_AUDIENCE", "idm-demo-mcp")
 PROTOCOL_VERSION = os.environ.get("IDMDEMO_PROTOCOL_VERSION", "2025-06-18")
 
 TOKEN_ENDPOINT = f"{AUTH_BASE_URL}/connect/token"
@@ -119,6 +120,7 @@ def request_token() -> str:
             "grant_type": "client_credentials",
             "client_id": CLIENT_ID,
             "scope": SCOPE,
+            "resource": AUDIENCE,
         }
     ).encode("ascii")
     context = ssl.create_default_context()
