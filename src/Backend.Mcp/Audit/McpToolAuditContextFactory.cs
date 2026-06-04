@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
@@ -28,12 +27,12 @@ public sealed class McpToolAuditContextFactory
         IDictionary<string, JsonElement>? arguments,
         McpToolPolicy? policy)
     {
-        var user = this._httpContextAccessor.HttpContext?.User;
+        var caller = this.GetCallerContext();
         return new McpToolAuditContext(
             toolName,
-            ReadClaim(user, "sub", ClaimTypes.NameIdentifier),
-            ReadClaim(user, "client_id"),
-            ReadScopes(user),
+            ReadSubject(caller),
+            ReadClientId(caller),
+            ReadScopes(caller),
             ReadInstance(arguments) ?? this._runtimeOptions.DefaultInstance,
             ReadString(arguments, "id") ?? ReadString(arguments, "clientId"),
             ReadString(arguments, "certificateId"),
@@ -44,6 +43,13 @@ public sealed class McpToolAuditContextFactory
             policy?.Destructive ?? false,
             policy?.RequiresCertificateScope ?? false);
     }
+
+    private static string? ReadSubject(McpCallerContext? caller) => caller?.Subject;
+
+    private static string? ReadClientId(McpCallerContext? caller) => caller?.ClientId;
+
+    private static IReadOnlyList<string> ReadScopes(McpCallerContext? caller) =>
+        caller?.Scopes ?? [];
 
     private static bool? ReadConfirm(IDictionary<string, JsonElement>? arguments)
     {
@@ -80,36 +86,6 @@ public sealed class McpToolAuditContextFactory
         };
     }
 
-    private static string? ReadClaim(ClaimsPrincipal? user, params string[] claimTypes)
-    {
-        if (user is null)
-        {
-            return null;
-        }
-
-        foreach (var claimType in claimTypes)
-        {
-            var value = user.FindFirst(claimType)?.Value;
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
-
-    private static string[] ReadScopes(ClaimsPrincipal? user)
-    {
-        if (user is null)
-        {
-            return [];
-        }
-
-        return user.FindAll("scope")
-            .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-    }
+    private McpCallerContext? GetCallerContext() =>
+        this._httpContextAccessor.HttpContext?.Items[typeof(McpCallerContext)] as McpCallerContext;
 }

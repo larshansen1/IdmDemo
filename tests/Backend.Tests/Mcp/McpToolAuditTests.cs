@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using System.Text.Json;
 using Backend.Mcp;
 using Backend.Mcp.Audit;
@@ -18,11 +17,10 @@ public sealed class McpToolAuditTests
     public void Create_CapturesCallerPolicyAndDestructiveArguments()
     {
         var context = new DefaultHttpContext();
-        var identity = new ClaimsIdentity("DPoP");
-        identity.AddClaim(new("sub", "subject-1"));
-        identity.AddClaim(new("client_id", "orders-agent"));
-        identity.AddClaim(new("scope", $"{McpScopes.Destructive} {McpScopes.Certificates}"));
-        context.User = new ClaimsPrincipal(identity);
+        context.Items[typeof(McpCallerContext)] = new McpCallerContext(
+            "subject-1",
+            "orders-agent",
+            [McpScopes.Certificates, McpScopes.Destructive]);
         var factory = new McpToolAuditContextFactory(
             new HttpContextAccessor { HttpContext = context },
             Options.Create(new McpRuntimeOptions

@@ -134,15 +134,11 @@ public sealed class McpMutationGuardTests
     private static McpMutationGuard CreateHostedGuard(params string[] scopes)
     {
         var context = new DefaultHttpContext();
-        var identity = new System.Security.Claims.ClaimsIdentity("DPoP");
-        identity.AddClaim(new("sub", "subject"));
-        identity.AddClaim(new("client_id", "client"));
-        foreach (var scope in scopes)
-        {
-            identity.AddClaim(new("scope", scope));
-        }
-
-        context.User = new(identity);
+        var allScopes = scopes
+            .SelectMany(s => s.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        context.Items[typeof(McpCallerContext)] = new McpCallerContext("subject", "client", allScopes);
 
         return new McpMutationGuard(
             Options.Create(new McpRuntimeOptions { Profile = McpProfile.LocalHostedDevelopment }),
