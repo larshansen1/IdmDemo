@@ -1,30 +1,60 @@
 # IdmDemo
 
-A simple Identity Provider and Authorization Server built for learning, private experimentation, and agentic development workflows.
+IdmDemo is a learning-oriented identity system for private experimentation and
+agentic development workflows. It combines a small Identity Provider, an
+OAuth-style Authorization Server, and an MCP Resource Server / IdP Admin
+Interface behind explicit runtime boundaries.
 
-Implements clean architecture, explicit security boundaries, structured observability, automated testing, and enforced quality gates from the start.
+The project is not a production-grade identity platform, but it is built with
+clean architecture, structured observability, automated testing, and enforced
+quality gates so the security and deployment tradeoffs are visible.
 
 ---
 
 ## What it does
 
-Epic 1 (complete) — SCIM-inspired administrative APIs for managing users and machine clients, protected by API-key authentication.
+### Identity Provider
 
-Epic 2 (complete) — OAuth-style client credentials token issuance for machine clients authenticated with mTLS, including JWT access tokens, discovery metadata, and JWKS.
+The IdP manages user identities, machine-client identities, global roles, global
+scopes, and machine-client certificates. Administrative APIs are SCIM-shaped and
+include lifecycle operations for users, clients, roles, scopes, certificate
+issuance, external certificate registration, and certificate revocation.
 
-Epic 3 (complete) — Machine-client certificate lifecycle APIs, including CSR-based issuance, external certificate registration, listing, lookup, and revocation.
+Administrative API routes are private/internal in the deployed architecture.
+They require an IdmDemo-issued bearer token with the `scim.admin` role. The
+admin machine client is seeded for deployment and is used by trusted internal
+callers such as the hosted MCP Resource Server.
 
-Epic 4 (complete) — Optional DPoP-bound access token issuance, DPoP proof validation, replay protection, and reusable downstream DPoP access-token validation services.
+### Authorization Server
 
-Epic 5 (complete) — Global role and scope catalog management, user role assignment, machine-client role/scope assignment validation, and active catalog filtering during token issuance.
+The authorization server exposes discovery metadata, JWKS, and a client
+credentials token endpoint. Machine clients authenticate at the token endpoint
+with mTLS client certificates; local and trusted-proxy deployments may forward
+the presented certificate through `X-Client-Cert` only when explicitly enabled.
 
-Epic 6 (complete) — MCP administrative interface over stdio for user, machine-client, role, scope, certificate, discovery, and JWKS operations.
+Issued JWT access tokens use `typ: at+jwt`, explicit resource audiences, roles,
+and scopes. Token issuance supports certificate-bound bearer tokens and
+DPoP-bound tokens with replay protection.
 
-Epic 7 (complete) — Hosted MCP profiles for local and production agent workflows, DPoP-bound hosted access, MCP tool authorization, audit events, and higher-level machine-client credential workflow tools.
+### MCP Resource Server / IdP Admin Interface
 
-See [product.md](product.md) for the full roadmap and
-[docs/current-architecture.md](docs/current-architecture.md) for the current
-runtime and production boundary.
+`Backend.Mcp` exposes IdP administration as MCP tools. `LocalStdio` is the
+developer-machine profile and trusts the local OS process boundary. Hosted MCP
+profiles validate caller tokens, enforce MCP scopes per tool, emit audit events,
+and call the private IdP admin API with a separate configured machine-client
+credential.
+
+In production, public traffic reaches only the hosted MCP resource and the
+explicitly exposed authorization-server discovery/token routes. Private IdP
+admin routes are not published through the public `auth` host.
+
+### Documentation map
+
+Use [docs/current-architecture.md](docs/current-architecture.md) for the current
+runtime and production boundary. Use [product.md](product.md) for the product
+roadmap and original epic-oriented requirements. Older epic and deployment notes
+under [docs/archive](docs/archive/) are historical context, not the current
+operational source of truth.
 
 ---
 
@@ -109,9 +139,12 @@ Swagger UI is available at `/swagger` when running in Development mode.
 
 ---
 
-## MCP server
+## MCP Resource Server / IdP Admin Interface
 
-`Backend.Mcp` exposes the administrative API as an MCP server named `idm-demo-mcp`. The default profile is `LocalStdio` for local agent workflows. Hosted HTTP profiles call `Backend.Api` using a configured machine-client identity and admin bearer token.
+`Backend.Mcp` exposes the IdP Admin Interface as an MCP resource server named
+`idm-demo-mcp`. The default profile is `LocalStdio` for local agent workflows.
+Hosted HTTP profiles call `Backend.Api` using a configured machine-client
+identity and admin bearer token.
 
 Start the API first:
 
@@ -368,7 +401,7 @@ deployment notes are archived in [`docs/archive/`](docs/archive/).
 │   ├── Backend.Application/    # Services, DTOs, SCIM filter parser
 │   ├── Backend.Domain/         # Entities, repository interfaces, domain exceptions
 │   ├── Backend.Infrastructure/ # EF Core DbContext, SQLite, repositories, migrations
-│   └── Backend.Mcp/            # stdio MCP server and administrative MCP tools
+│   └── Backend.Mcp/            # MCP Resource Server / IdP Admin Interface tools
 ├── tests/
 │   ├── Backend.Tests/          # Unit tests (xUnit + NSubstitute)
 │   └── Backend.IntegrationTests/ # End-to-end tests (WebApplicationFactory + SQLite)

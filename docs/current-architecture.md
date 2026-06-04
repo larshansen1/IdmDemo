@@ -3,13 +3,31 @@
 This document reflects the current deployed IdmDemo architecture as of the
 OAuth-admin and hosted MCP work.
 
+It is the current runtime source of truth. `product.md` remains the
+epic-oriented product roadmap and original requirement record. Documents under
+`docs/archive/` are historical planning and deployment notes; they may explain
+why earlier decisions were made, but they should not override this file or the
+root README for current boundaries.
+
 ## Services
 
-`Backend.Api` is the authorization server and private administrative API.
+IdmDemo currently has three product/architecture roles:
 
-`Backend.Mcp` is the public hosted MCP resource server. It validates IdmDemo
-access tokens, enforces hosted MCP scopes, and calls the private administrative
-API using its configured machine-client identity.
+- **Identity Provider / IdP Admin API**: manages users, machine clients, global
+  roles, global scopes, and machine-client certificates through private
+  SCIM-shaped administrative endpoints.
+- **Authorization Server**: exposes public discovery, JWKS, and token issuance.
+  Machine clients authenticate with client certificates, and issued JWT access
+  tokens use explicit resource audiences.
+- **MCP Resource Server / IdP Admin Interface**: exposes IdP administration as
+  MCP tools. Hosted MCP validates caller tokens for the MCP audience, enforces
+  MCP scopes, and calls the private IdP admin API with a separate configured
+  machine-client credential.
+
+`Backend.Api` currently hosts both the Identity Provider admin API and the
+Authorization Server endpoints.
+
+`Backend.Mcp` hosts the MCP Resource Server / IdP Admin Interface.
 
 Production runs both services with Docker Compose:
 
