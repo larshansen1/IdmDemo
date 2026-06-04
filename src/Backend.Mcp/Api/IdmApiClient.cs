@@ -375,29 +375,14 @@ public sealed class IdmApiClient : IIdmApiClient
     }
 
 #pragma warning disable CA1822
-    private async Task<string> ReadErrorMessageAsync(
+    private Task<string> ReadErrorMessageAsync(
         HttpResponseMessage response,
         string correlationId,
         CancellationToken cancellationToken)
 #pragma warning restore CA1822
     {
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(body))
-        {
-            try
-            {
-                var scimError = JsonSerializer.Deserialize<ScimError>(body, _jsonOptions);
-                if (!string.IsNullOrWhiteSpace(scimError?.Detail))
-                {
-                    return $"{(int)response.StatusCode} {response.StatusCode}: {scimError.Detail} CorrelationId={correlationId}";
-                }
-            }
-            catch (JsonException)
-            {
-                return $"{(int)response.StatusCode} {response.StatusCode}: {body} CorrelationId={correlationId}";
-            }
-        }
+        cancellationToken.ThrowIfCancellationRequested();
 
-        return $"{(int)response.StatusCode} {response.StatusCode}. CorrelationId={correlationId}";
+        return Task.FromResult($"{(int)response.StatusCode} {response.StatusCode}. CorrelationId={correlationId}");
     }
 }
