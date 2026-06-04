@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Backend.Api.Composition;
 using Backend.Application.Models.Auth;
 using Backend.Application.Models.Scim;
 using Backend.Application.Services;
@@ -143,8 +144,7 @@ public sealed class ScimOAuthMiddleware
 
     private static bool IsPublicPath(PathString path)
     {
-        return path.StartsWithSegments("/.well-known", StringComparison.OrdinalIgnoreCase) ||
-               path.StartsWithSegments("/connect/token", StringComparison.OrdinalIgnoreCase);
+        return AuthorizationServerApiComposition.IsAuthorizationServerRoute(path);
     }
 
     private static bool TryReadAuthorization(string? authorization, out string scheme, out string accessToken)
