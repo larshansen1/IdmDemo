@@ -102,6 +102,7 @@ app.UseExceptionHandler();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseRateLimiter();
 app.UseMiddleware<ScimOAuthMiddleware>();
+app.UseMiddleware<ScimAdminAuditMiddleware>();
 
 app.MapControllers();
 

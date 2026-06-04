@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
 using Backend.Application.Models.Scim;
@@ -58,6 +59,8 @@ public sealed class ScimOAuthMiddleware
                 await WriteForbiddenAsync(context).ConfigureAwait(false);
                 return;
             }
+
+            context.User = CreatePrincipal(validated);
         }
         catch (OAuthException)
         {
@@ -66,6 +69,28 @@ public sealed class ScimOAuthMiddleware
         }
 
         await this._next(context).ConfigureAwait(false);
+    }
+
+    private static ClaimsPrincipal CreatePrincipal(ValidatedAccessToken token)
+    {
+        var claims = new List<Claim>
+        {
+            new("sub", token.Subject),
+            new("client_id", token.ClientId),
+        };
+
+        if (!string.IsNullOrWhiteSpace(token.Scope))
+        {
+            claims.Add(new Claim("scope", token.Scope));
+        }
+
+        foreach (var role in token.Roles)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role));
+            claims.Add(new Claim("role", role));
+        }
+
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, "Bearer"));
     }
 
     private static async Task<ValidatedAccessToken> ValidateBearerOrDpopAsync(

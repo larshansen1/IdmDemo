@@ -70,6 +70,8 @@ public sealed class ScimOAuthMiddlewareTests
             new DpopBoundAccessTokenValidatorStub(CreateAdminToken(dpopJwkThumbprint: "jkt")));
 
         Assert.True(nextCalled);
+        Assert.Equal("idm-admin", context.User.FindFirst("sub")?.Value);
+        Assert.Equal("idm-admin", context.User.FindFirst("client_id")?.Value);
     }
 
     [Fact]
