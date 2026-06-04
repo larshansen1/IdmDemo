@@ -48,6 +48,7 @@ public sealed class TokenController : ControllerBase
                 request.Scope,
                 certificate,
                 dpopProof.ToString(),
+                request.Resource,
                 cancellationToken).ConfigureAwait(false);
 
             return this.Ok(response);

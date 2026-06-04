@@ -102,6 +102,30 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
     }
 
     [Fact]
+    public async Task PostToken_McpResourceWithMcpScope_ReturnsMcpAudienceJwt()
+    {
+        var clientId = $"mcp-{Guid.NewGuid():N}";
+        using var certificate = CreateCertificate(clientId);
+        var client = await this.CreateClientAsync(
+            clientId,
+            ComputeThumbprintHex(certificate),
+            ["idm.mcp.read"],
+            []);
+        using var request = CreateTokenRequest(client.ClientId, "idm.mcp.read", "idm-demo-mcp");
+        request.Headers.Add("X-Client-Cert", Convert.ToBase64String(certificate.RawData));
+
+        var response = await this._client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(_jsonOptions);
+        Assert.NotNull(tokenResponse);
+
+        var payload = ReadJwtPayload(tokenResponse.AccessToken);
+        Assert.Equal("idm-demo-mcp", payload.GetProperty("aud").GetString());
+        Assert.Equal("idm.mcp.read", payload.GetProperty("scope").GetString());
+    }
+
+    [Fact]
     public async Task PostToken_EscapedForwardedPemCertificate_ReturnsCertificateBoundJwt()
     {
         var clientId = $"nginx-{Guid.NewGuid():N}";
@@ -335,16 +359,22 @@ public sealed class AuthorizationServerApiTests : IClassFixture<TestWebApplicati
         Assert.Equal("DPoP", tokenResponse.TokenType);
     }
 
-    private static HttpRequestMessage CreateTokenRequest(string clientId, string scope)
+    private static HttpRequestMessage CreateTokenRequest(string clientId, string scope, string? resource = null)
     {
+        var form = new List<KeyValuePair<string, string>>
+        {
+            new("grant_type", "client_credentials"),
+            new("client_id", clientId),
+            new("scope", scope),
+        };
+        if (!string.IsNullOrWhiteSpace(resource))
+        {
+            form.Add(new KeyValuePair<string, string>("resource", resource));
+        }
+
         return new HttpRequestMessage(HttpMethod.Post, new Uri("/connect/token", UriKind.Relative))
         {
-            Content = new FormUrlEncodedContent(
-            [
-                new KeyValuePair<string, string>("grant_type", "client_credentials"),
-                new KeyValuePair<string, string>("client_id", clientId),
-                new KeyValuePair<string, string>("scope", scope),
-            ]),
+            Content = new FormUrlEncodedContent(form),
         };
     }
 

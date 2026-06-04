@@ -115,6 +115,71 @@ public sealed class AuthorizationServerServiceTests
     }
 
     [Fact]
+    public async Task IssueClientCredentialsTokenAsync_McpResourceWithMcpScope_ReturnsMcpAudienceJwt()
+    {
+        using var certificate = CreateCertificate();
+        var client = CreateClient(certificate);
+        client.AssignScopes(["idm.mcp.read"]);
+        var repository = Substitute.For<IMachineClientRepository>();
+        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        var service = CreateService(repository);
+
+        var response = await service.IssueClientCredentialsTokenAsync(
+            "client_credentials",
+            client.ClientId,
+            "idm.mcp.read",
+            certificate,
+            resource: "idm-demo-mcp");
+
+        var payload = ReadJwtPayload(response.AccessToken);
+        Assert.Equal("idm-demo-mcp", payload.GetProperty("aud").GetString());
+    }
+
+    [Fact]
+    public async Task IssueClientCredentialsTokenAsync_McpResourceWithoutMcpScope_ThrowsInvalidTarget()
+    {
+        using var certificate = CreateCertificate();
+        var client = CreateClient(certificate);
+        client.AssignScopes(["orders.read"]);
+        var repository = Substitute.For<IMachineClientRepository>();
+        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        var service = CreateService(repository);
+
+        var exception = await Assert.ThrowsAsync<OAuthException>(() =>
+            service.IssueClientCredentialsTokenAsync(
+                "client_credentials",
+                client.ClientId,
+                "orders.read",
+                certificate,
+                resource: "idm-demo-mcp"));
+
+        Assert.Equal("invalid_target", exception.Error);
+        Assert.Equal(400, exception.StatusCode);
+    }
+
+    [Fact]
+    public async Task IssueClientCredentialsTokenAsync_UnknownResource_ThrowsInvalidTarget()
+    {
+        using var certificate = CreateCertificate();
+        var client = CreateClient(certificate);
+        client.AssignScopes(["idm.mcp.read"]);
+        var repository = Substitute.For<IMachineClientRepository>();
+        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        var service = CreateService(repository);
+
+        var exception = await Assert.ThrowsAsync<OAuthException>(() =>
+            service.IssueClientCredentialsTokenAsync(
+                "client_credentials",
+                client.ClientId,
+                "idm.mcp.read",
+                certificate,
+                resource: "unknown-resource"));
+
+        Assert.Equal("invalid_target", exception.Error);
+        Assert.Equal(400, exception.StatusCode);
+    }
+
+    [Fact]
     public async Task IssueClientCredentialsTokenAsync_RequireDpopWithoutProof_ThrowsInvalidDpopProof()
     {
         using var certificate = CreateCertificate();

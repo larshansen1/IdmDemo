@@ -117,7 +117,8 @@ Start the API first:
 
 ```bash
 AuthorizationServer__Issuer=http://localhost:5000 \
-AuthorizationServer__Audience=idm-demo-mcp \
+AuthorizationServer__Audience=idm-demo-api \
+AuthorizationServer__McpAudience=idm-demo-mcp \
 AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
 AuthorizationServer__EnableForwardedClientCertificate=true \
 ScimAdmin__SeedClientId=idm-admin \
@@ -229,7 +230,7 @@ Production endpoint boundary:
 | `Backend.Api` | discovery and token issuance | Public when explicitly exposed by nginx | Client certificate authentication for token issuance; optional DPoP proof binds issued tokens |
 | `Backend.Api` | SCIM, certificate, role, scope, and access-management administration | Private/internal only | `scim.admin` bearer token |
 
-MCP tokens and API administrative access are separate resource boundaries in this phase. MCP callers present tokens for the MCP audience; hosted MCP then calls private `Backend.Api` with its configured machine-client identity and a `scim.admin` bearer token. Public production traffic should reach only the hosted MCP resource and explicitly exposed OAuth discovery/token endpoints, not API administrative routes. Strip and recreate forwarded headers at the trusted proxy boundary only.
+MCP tokens and API administrative access are separate resource boundaries in this phase. MCP callers request tokens with `resource=idm-demo-mcp` and present tokens for the MCP audience; hosted MCP then calls private `Backend.Api` with its configured machine-client identity and a `scim.admin` bearer token. Public production traffic should reach only the hosted MCP resource and explicitly exposed OAuth discovery/token endpoints, not API administrative routes. Strip and recreate forwarded headers at the trusted proxy boundary only.
 
 ### MCP tools
 
@@ -310,7 +311,8 @@ For the demo scripts, use an explicit URL, issuer, signing key path, seeded admi
 
 ```bash
 AuthorizationServer__Issuer=http://localhost:5000 \
-AuthorizationServer__Audience=idm-demo-mcp \
+AuthorizationServer__Audience=idm-demo-api \
+AuthorizationServer__McpAudience=idm-demo-mcp \
 AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
 AuthorizationServer__EnableForwardedClientCertificate=true \
 ScimAdmin__SeedClientId=idm-admin \
@@ -502,7 +504,8 @@ Override via environment variables for deployment:
 ```bash
 ConnectionStrings__Default="Data Source=/data/idm.db" \
 AuthorizationServer__Issuer=https://issuer.example.test \
-AuthorizationServer__Audience=idm-demo-mcp \
+AuthorizationServer__Audience=idm-demo-api \
+AuthorizationServer__McpAudience=idm-demo-mcp \
 AuthorizationServer__SigningKeyPath=/keys/signing-key.json \
 ScimAdmin__SeedClientId=idm-admin \
 ScimAdmin__SeedCertPath=/keys/admin-client.pem \

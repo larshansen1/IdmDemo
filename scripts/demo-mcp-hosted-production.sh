@@ -5,7 +5,8 @@ set -euo pipefail
 #   bash scripts/demo-mcp-hosted-production.sh [-v|--verbose]
 #
 # Expected services:
-#   Backend.Api running with AuthorizationServer__Audience=idm-demo-mcp
+#   Backend.Api running with AuthorizationServer__Audience=idm-demo-api
+#     and AuthorizationServer__McpAudience=idm-demo-mcp
 #   Backend.Mcp running with Mcp__Profile=HostedProduction
 # Optional environment:
 #   API_BASE_URL private/admin API URL, AUTH_BASE_URL public token URL,
