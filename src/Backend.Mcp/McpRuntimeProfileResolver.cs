@@ -11,6 +11,8 @@ public static class McpRuntimeProfileResolver
 
         return profile switch
         {
+            // LocalStdio trusts the OS process boundary. Do not run stdio mode in multi-tenant
+            // or shared environments; use LocalHostedDevelopment with caller tokens instead.
             McpProfile.LocalStdio => new McpEffectiveRuntimeSettings(
                 profile,
                 McpTransport.Stdio,

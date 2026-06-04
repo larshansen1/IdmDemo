@@ -142,6 +142,8 @@ dotnet run --project src/Backend.Mcp
 
 Set `Mcp__ReadOnly=true` to block mutating and destructive tools. Destructive tools also require `confirm: true`.
 
+`LocalStdio` trusts the local OS process boundary instead of authenticating each MCP caller. Do not run stdio mode in multi-tenant workstations, shared CI runners, or container environments where another process could connect to the stdio channel. Use `LocalHostedDevelopment` with caller tokens for shared-host CI or any local workflow that needs an explicit caller identity.
+
 Run the local hosted development profile:
 
 ```bash
@@ -189,6 +191,8 @@ Profile security posture:
 | `LocalStdio` | stdio | Not required | Not used | Not used | `false` |
 | `LocalHostedDevelopment` | HTTP on localhost, or development/test only | Required | Accepted | Allowed for development/testing | `false` |
 | `HostedProduction` | HTTP behind a trusted reverse proxy | Required | Required | Rejected | `true` |
+
+`LocalStdio` intentionally has no caller token check. The security boundary is the local process/session isolation provided by the operating system; `Mcp__ReadOnly=true` can reduce impact, but it is not the default for stdio.
 
 `LocalHostedDevelopment` allows non-local HTTP bindings only when the host environment is `Development`, `Test`, or `Testing`, or when `Mcp__Hosted__AllowNonLocalDevelopmentBinding=true` is set deliberately for development/test scenarios.
 

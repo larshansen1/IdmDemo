@@ -151,7 +151,7 @@ public sealed class IdmApiClientTests
     }
 
     [Fact]
-    public async Task GetClientAsync_ErrorResponse_ThrowsApiExceptionWithScimDetail()
+    public async Task GetClientAsync_ErrorResponse_ThrowsApiExceptionWithoutScimDetail()
     {
         using var handler = new CapturingHandler(
             HttpStatusCode.NotFound,
@@ -162,7 +162,24 @@ public sealed class IdmApiClientTests
             apiClient.GetClientAsync(null, Guid.NewGuid(), CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.NotFound, exception.StatusCode);
-        Assert.Contains("Client was not found.", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("404 NotFound", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Client was not found.", exception.Message, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(exception.CorrelationId));
+    }
+
+    [Fact]
+    public async Task GetClientAsync_NonScimErrorResponse_ThrowsApiExceptionWithoutBody()
+    {
+        const string internalError = "stack trace: /srv/idm-demo/internal.sql";
+        using var handler = new TextResponseHandler(HttpStatusCode.InternalServerError, internalError);
+        var apiClient = CreateClient(handler);
+
+        var exception = await Assert.ThrowsAsync<IdmApiException>(() =>
+            apiClient.GetClientAsync(null, Guid.NewGuid(), CancellationToken.None));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, exception.StatusCode);
+        Assert.Contains("500 InternalServerError", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(internalError, exception.Message, StringComparison.Ordinal);
         Assert.False(string.IsNullOrWhiteSpace(exception.CorrelationId));
     }
 
@@ -313,6 +330,30 @@ public sealed class IdmApiClientTests
                 var json = JsonSerializer.Serialize(this._response, _jsonOptions);
                 response.Content = new StringContent(json);
             }
+
+            return Task.FromResult(response);
+        }
+    }
+
+    private sealed class TextResponseHandler : HttpMessageHandler
+    {
+        private readonly HttpStatusCode _statusCode;
+        private readonly string _response;
+
+        public TextResponseHandler(HttpStatusCode statusCode, string response)
+        {
+            this._statusCode = statusCode;
+            this._response = response;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(this._statusCode)
+            {
+                Content = new StringContent(this._response),
+            };
 
             return Task.FromResult(response);
         }
