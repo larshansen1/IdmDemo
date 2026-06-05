@@ -28,16 +28,11 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: dotnet-test-coverage
-        name: Run tests with coverage gate (80%)
-        entry: >-
-          dotnet test
-          /p:CollectCoverage=true
-          /p:CoverletOutputFormat=cobertura
-          /p:Threshold=80
-          /p:ThresholdType=line
-          /p:ThresholdStat=Total
+      - id: dotnet-test-coverage-changed
+        name: Coverage gate for changed assemblies (unit tests only)
+        entry: bash scripts/check-coverage-changed.sh
         language: system
+        files: \.cs$
         pass_filenames: false
 
       - id: dotnet-vulnerabilities

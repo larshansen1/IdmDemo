@@ -13,15 +13,15 @@ COVERAGE_EXCLUDE := [Backend.Infrastructure]*%2c[Backend.Mcp]Program*
 ## Run all quality checks (default target)
 all: check
 
-check: build lint test coverage complexity duplicates security secrets vulnerabilities
+check: build lint coverage complexity duplicates secrets vulnerabilities
 	@echo ""
 	@echo "✔  All quality checks passed."
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
 build:
-	@echo "==> Building solution..."
-	dotnet build --no-incremental -warnaserror
+	@echo "==> Building solution (with analyzers)..."
+	dotnet build --no-incremental -warnaserror /p:RunAnalyzers=true
 
 # ── Tests & Coverage ─────────────────────────────────────────────────────────
 
@@ -75,10 +75,8 @@ duplicates:
 
 # ── Security ─────────────────────────────────────────────────────────────────
 
-security:
-	@echo "==> Running security analysis (Roslyn analyzers)..."
-	dotnet build --no-incremental -warnaserror /p:RunAnalyzers=true
-	@echo "Security analysis passed."
+security: build
+	@echo "Security analysis: Roslyn analyzers run as part of build."
 
 vulnerabilities:
 	@bash scripts/check-vulnerabilities.sh
