@@ -7,8 +7,8 @@ on:
     branches: ["main"]
 
 jobs:
-  quality:
-    name: Quality Gates
+  quality-fast:
+    name: Quality Gates — Fast
     runs-on: ubuntu-latest
 
     steps:
@@ -19,23 +19,30 @@ jobs:
         with:
           dotnet-version: "8.x"
 
-      - name: Set up Python (for lizard)
-        uses: actions/setup-python@v6
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
         with:
-          python-version: "3.x"
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
 
-      - name: Set up Node (for jscpd)
-        uses: actions/setup-node@v6
+      - name: Cache .NET local tools
+        uses: actions/cache@v4
         with:
-          node-version: "20"
+          path: ~/.dotnet/tools
+          key: dotnet-tools-${{ hashFiles('.config/dotnet-tools.json') }}
 
-      - name: Install external tools
+      - name: Cache gitleaks binary
+        id: cache-gitleaks
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/gitleaks
+          key: gitleaks-8.21.2-linux-x64
+
+      - name: Install gitleaks
+        if: steps.cache-gitleaks.outputs.cache-hit != 'true'
         run: |
-          pip install lizard
-          npm install -g jscpd
-          # Install gitleaks
-          GITLEAKS_VERSION=8.21.2
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz" \
             | tar -xz -C /usr/local/bin gitleaks
 
       - name: Restore .NET local tools
@@ -45,7 +52,7 @@ jobs:
         run: dotnet restore
 
       - name: Build (with analyzers)
-        run: dotnet build --no-restore --no-incremental -warnaserror /p:RunAnalyzers=true
+        run: dotnet build --no-restore -warnaserror /p:RunAnalyzers=true
 
       - name: Lint (formatting check)
         run: dotnet format --no-restore --verify-no-changes
@@ -67,22 +74,56 @@ jobs:
           name: coverage
           path: "**/coverage/coverage.cobertura.xml"
 
-      - name: Complexity check
-        run: bash scripts/check-complexity.sh 10
-
-      - name: Duplicate code check
-        run: bash scripts/check-duplicates.sh 5
-
       - name: Secret / credential scan
         run: bash scripts/check-secrets.sh
 
       - name: Vulnerability check
         run: bash scripts/check-vulnerabilities.sh
 
+  quality-slow:
+    name: Quality Gates — Slow
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python (for lizard)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Set up Node (for jscpd)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-lizard
+
+      - name: Cache npm packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-jscpd
+
+      - name: Install external tools
+        run: |
+          pip install lizard
+          npm install -g jscpd
+
+      - name: Complexity check
+        run: bash scripts/check-complexity.sh 10
+
+      - name: Duplicate code check
+        run: bash scripts/check-duplicates.sh 5
+
   deploy-production:
     name: Deploy Production
     runs-on: [self-hosted, workhorse-idmdemo]
-    needs: quality
+    needs: [quality-fast, quality-slow]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
