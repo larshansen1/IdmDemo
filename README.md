@@ -58,375 +58,65 @@ operational source of truth.
 
 ---
 
-## API
+## Security standards
 
-Administrative SCIM, certificate, role, scope, and access-management endpoints require `Authorization: Bearer <token>` where the token has the `scim.admin` role. They use `Content-Type: application/scim+json`.
+The system is built around established RFCs and security standards rather than
+custom protocol design. The goal is that the tradeoffs at each layer are
+traceable to a published specification.
 
-Authorization-server discovery and JWKS are public. Token requests use OAuth-style form encoding and OAuth-style error responses.
+### Token security
 
-### Users
+| Standard | Role in this project |
+|---|---|
+| [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) — JWT Profile for OAuth 2.0 Access Tokens | `typ: at+jwt` on all issued tokens; validators require this type to prevent JWT type confusion |
+| [RFC 8705](https://www.rfc-editor.org/rfc/rfc8705) — OAuth 2.0 Mutual-TLS Client Authentication | mTLS client authentication at the token endpoint; certificate-bound access tokens (`cnf.x5t#S256`) |
+| [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449) — OAuth 2.0 Demonstrating Proof of Possession (DPoP) | DPoP-bound tokens (`cnf.jkt`) with proof-lifetime and server-side replay cache; required in hosted production |
+| [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519) — JSON Web Token | JWT structure for all issued access tokens |
+| [RFC 7517](https://www.rfc-editor.org/rfc/rfc7517) — JSON Web Key | JWKS endpoint for public key distribution |
 
-```
-POST   /scim/v2/Users
-GET    /scim/v2/Users?filter=userName eq "alice"
-GET    /scim/v2/Users/{id}
-PUT    /scim/v2/Users/{id}
-PATCH  /scim/v2/Users/{id}
-DELETE /scim/v2/Users/{id}
-```
+### Protocol
 
-### Machine Clients
+| Standard | Role in this project |
+|---|---|
+| [RFC 6749](https://www.rfc-editor.org/rfc/rfc6749) — OAuth 2.0 | `client_credentials` grant for machine-to-machine token requests |
+| [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html) | `/.well-known/openid-configuration` metadata endpoint |
 
-```
-POST   /scim/v2/Clients
-GET    /scim/v2/Clients?filter=clientId eq "orders-service"
-GET    /scim/v2/Clients/{id}
-PUT    /scim/v2/Clients/{id}
-PATCH  /scim/v2/Clients/{id}
-DELETE /scim/v2/Clients/{id}
-```
+### Identity management
 
-### Global Roles
+| Standard | Role in this project |
+|---|---|
+| [RFC 7643](https://www.rfc-editor.org/rfc/rfc7643) + [RFC 7644](https://www.rfc-editor.org/rfc/rfc7644) — SCIM 2.0 | SCIM-shaped administrative API for user, client, role, and scope lifecycle; private/internal boundary only |
 
-```
-POST   /scim/v2/Roles
-GET    /scim/v2/Roles?filter=value eq "service-admin"
-GET    /scim/v2/Roles/{id}
-PUT    /scim/v2/Roles/{id}
-PATCH  /scim/v2/Roles/{id}
-DELETE /scim/v2/Roles/{id}
-```
+### Architecture security posture
 
-### Global Scopes
-
-```
-POST   /scim/v2/Scopes
-GET    /scim/v2/Scopes?filter=value eq "orders.read"
-GET    /scim/v2/Scopes/{id}
-PUT    /scim/v2/Scopes/{id}
-PATCH  /scim/v2/Scopes/{id}
-DELETE /scim/v2/Scopes/{id}
-```
-
-### Client Certificates
-
-```
-GET    /scim/v2/Certificates/Authority
-POST   /scim/v2/Clients/{clientRecordId}/Certificates
-GET    /scim/v2/Clients/{clientRecordId}/Certificates
-GET    /scim/v2/Clients/{clientRecordId}/Certificates/{certificateId}
-POST   /scim/v2/Clients/{clientRecordId}/Certificates/{certificateId}/Revoke
-```
-
-`clientRecordId` is the internal GUID returned as `id` by `/scim/v2/Clients`. It is not the external OAuth `clientId` string.
-
-### Authorization Server
-
-```
-GET  /.well-known/openid-configuration
-GET  /.well-known/jwks.json
-POST /connect/token
-```
-
-`/connect/token` supports `grant_type=client_credentials` for registered machine clients. The client certificate is supplied by the TLS layer in production. Local development and private deployment-host smoke tests may use `X-Client-Cert` with a base64 DER certificate when `AuthorizationServer:EnableForwardedClientCertificate` is enabled and the caller is inside the trusted proxy boundary.
-
-When a token request omits `DPoP`, the server issues a certificate-bound bearer token with `cnf.x5t#S256`. When a request includes a valid `DPoP` proof JWT, the server issues a DPoP-bound token with `token_type=DPoP` and `cnf.jkt`.
-
-Issued access tokens use JWT header `typ: at+jwt`, and validators require that
-type to reduce JWT type-confusion risk.
-
-Swagger UI is available at `/swagger` when running in Development mode.
+- **Private admin boundary** — SCIM and certificate management endpoints are never exposed publicly. nginx returns `404` for any `/scim/v2/*` path on the public `auth` host.
+- **Trusted reverse proxy** — nginx terminates TLS, strips and recreates forwarded headers (`X-Client-Cert`), and proxies only explicitly allowed routes to backend services.
+- **Hosted production requires DPoP** — bearer tokens are accepted only in `LocalHostedDevelopment` for local testing; `HostedProduction` rejects them.
+- **MCP tool authorization** — enforces scopes from the caller's access token (`idm.mcp.read`, `idm.mcp.write`, `idm.mcp.destructive`, `idm.mcp.certificates`). Destructive tools additionally require `confirm: true`.
 
 ---
 
-## MCP Resource Server / IdP Admin Interface
-
-`Backend.Mcp` exposes the IdP Admin Interface as an MCP resource server named
-`idm-demo-mcp`. The default profile is `LocalStdio` for local agent workflows.
-Hosted HTTP profiles call `Backend.Api` using a configured machine-client
-identity and admin bearer token.
-
-Start the API first:
-
-```bash
-AuthorizationServer__Issuer=http://localhost:5000 \
-AuthorizationServer__Audience=idm-demo-api \
-AuthorizationServer__McpAudience=idm-demo-mcp \
-AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
-AuthorizationServer__EnableForwardedClientCertificate=true \
-ScimAdmin__SeedClientId=idm-admin \
-ScimAdmin__SeedCertPath=/tmp/idmdemo-dev/admin-client.pem \
-ScimAdmin__GenerateCertIfMissing=true \
-ConnectionStrings__Default="Data Source=idm-demo.db" \
-dotnet run --project src/Backend.Api --urls http://localhost:5000
-```
-
-Run the local stdio MCP profile with a configured IdM API instance:
-
-```bash
-IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
-IdmApiInstances__local__ClientId=idm-admin \
-IdmApiInstances__local__ClientCertificatePath=/tmp/idmdemo-dev/admin-client.pem \
-Mcp__Profile=LocalStdio \
-Mcp__DefaultInstance=local \
-Mcp__ReadOnly=false \
-dotnet run --project src/Backend.Mcp
-```
-
-Set `Mcp__ReadOnly=true` to block mutating and destructive tools. Destructive tools also require `confirm: true`.
-
-`LocalStdio` trusts the local OS process boundary instead of authenticating each MCP caller. Do not run stdio mode in multi-tenant workstations, shared CI runners, or container environments where another process could connect to the stdio channel. Use `LocalHostedDevelopment` with caller tokens for shared-host CI or any local workflow that needs an explicit caller identity.
-
-Run the local hosted development profile:
-
-```bash
-IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
-IdmApiInstances__local__ClientId=idm-admin \
-IdmApiInstances__local__ClientCertificatePath=/tmp/idmdemo-dev/admin-client.pem \
-AuthorizationServer__Issuer=http://localhost:5000 \
-AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
-Mcp__Profile=LocalHostedDevelopment \
-Mcp__DefaultInstance=local \
-Mcp__ReadOnly=false \
-Mcp__Hosted__Audience=idm-demo-mcp \
-dotnet run --project src/Backend.Mcp --urls http://localhost:5100
-```
-
-Run the hosted production profile:
-
-```bash
-IdmApiInstances__local__BaseUrl=http://127.0.0.1:5000 \
-IdmApiInstances__local__ClientId=idm-admin \
-IdmApiInstances__local__ClientCertificatePath=/tmp/idmdemo-dev/admin-client.pem \
-AuthorizationServer__Issuer=http://localhost:5000 \
-AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
-Mcp__Profile=HostedProduction \
-Mcp__DefaultInstance=local \
-Mcp__Hosted__Audience=idm-demo-mcp \
-dotnet run --project src/Backend.Mcp --urls http://localhost:5100
-```
-
-Profile demo scripts:
-
-```bash
-bash scripts/demo-mcp-local-stdio.sh
-bash scripts/demo-mcp-local-hosted-development.sh
-bash scripts/demo-mcp-phase-5-workflows.sh
-bash scripts/demo-mcp-hosted-production.sh
-```
-
-`scripts/demo-hosted-mcp.sh` remains as a compatibility wrapper for the local hosted development demo.
-
-Profile security posture:
-
-| Profile | Transport | Caller token | DPoP | Bearer tokens | Default read-only |
-| --- | --- | --- | --- | --- | --- |
-| `LocalStdio` | stdio | Not required | Not used | Not used | `false` |
-| `LocalHostedDevelopment` | HTTP on localhost, or development/test only | Required | Accepted | Allowed for development/testing | `false` |
-| `HostedProduction` | HTTP behind a trusted reverse proxy | Required | Required | Rejected | `true` |
-
-`LocalStdio` intentionally has no caller token check. The security boundary is the local process/session isolation provided by the operating system; `Mcp__ReadOnly=true` can reduce impact, but it is not the default for stdio.
-
-`LocalHostedDevelopment` allows non-local HTTP bindings only when the host environment is `Development`, `Test`, or `Testing`, or when `Mcp__Hosted__AllowNonLocalDevelopmentBinding=true` is set deliberately for development/test scenarios.
-
-Hosted MCP tool authorization uses scopes from the caller's access token:
-
-| Scope | Allows |
-| --- | --- |
-| `idm.mcp.read` | Read-only tools |
-| `idm.mcp.write` | Non-destructive mutating tools |
-| `idm.mcp.destructive` | Destructive tools when `confirm: true` is supplied |
-| `idm.mcp.certificates` | Certificate issuance, registration, revocation, onboarding with certificates, and certificate rotation workflows |
-
-Environment overrides for hosted demo scripts:
-
-```bash
-API_BASE_URL=http://localhost:5000 \
-MCP_BASE_URL=http://localhost:5100 \
-ADMIN_CERT_PATH=/tmp/idmdemo-dev/admin-client.pem \
-MCP_AUDIENCE=idm-demo-mcp \
-bash scripts/demo-mcp-local-hosted-development.sh --verbose
-```
-
-Hosted MCP endpoints:
-
-```
-POST /mcp
-GET  /health/live
-GET  /health/ready
-```
-
-`/health/ready` validates hosted auth configuration and checks each configured IdM API instance for reachability. The readiness response includes both raw MCP configuration values and the resolved effective profile posture so operators can see which values were supplied and which values the runtime is enforcing.
-
-Production endpoint boundary:
-
-| Component | Endpoint class | Exposure | Authentication |
-| --- | --- | --- | --- |
-| `Backend.Mcp` | `/mcp` | Public resource behind trusted reverse proxy | IdmDemo-issued MCP access token with `aud` equal to `Mcp:Hosted:Audience`; `HostedProduction` requires DPoP |
-| `Backend.Mcp` | `/health/live`, `/health/ready` | Operational endpoint, deployment-controlled | Protected by infrastructure policy when exposed |
-| `Backend.Api` | discovery and token issuance | Public when explicitly exposed by nginx | Client certificate authentication for token issuance; optional DPoP proof binds issued tokens |
-| `Backend.Api` | SCIM, certificate, role, scope, and access-management administration | Private/internal only | `scim.admin` bearer token |
-
-MCP tokens and API administrative access are separate resource boundaries in this phase. MCP callers request tokens with `resource=idm-demo-mcp` and present tokens for the MCP audience; hosted MCP then calls private `Backend.Api` with its configured machine-client identity and a `scim.admin` bearer token. Public production traffic should reach only the hosted MCP resource and explicitly exposed OAuth discovery/token endpoints, not API administrative routes. Strip and recreate forwarded headers at the trusted proxy boundary only.
-
-### MCP tools
-
-User tools:
-
-```
-idm_create_user
-idm_get_user
-idm_update_user
-idm_delete_user
-```
-
-Machine-client tools:
-
-```
-idm_create_machine_client
-idm_get_machine_client
-idm_list_machine_clients
-idm_update_machine_client
-idm_delete_machine_client
-```
-
-Role and scope tools:
-
-```
-idm_create_global_role
-idm_update_global_role
-idm_delete_global_role
-idm_create_global_scope
-idm_update_global_scope
-idm_delete_global_scope
-```
-
-Certificate and authorization-server tools:
-
-```
-idm_register_external_client_certificate
-idm_issue_client_certificate_from_csr
-idm_list_client_certificates
-idm_get_client_certificate
-idm_revoke_client_certificate
-idm_inspect_client_credential_status
-idm_get_certificate_authority
-idm_get_authorization_server_metadata
-idm_get_jwks
-```
-
-Workflow tools:
-
-```
-idm_onboard_machine_client
-idm_rotate_machine_client_certificate
-idm_prepare_dpop_client_credential_instructions
-idm_preflight_machine_client_deployment
-```
-
-`idm_list_machine_clients` includes certificate collection summaries and active certificate metadata for each returned client. The legacy single-certificate fields on the underlying SCIM client resource are retained only for compatibility and do not describe the certificate collection.
-
-Certificate MCP tools accept either the internal client record GUID or the external machine-client `clientId` such as `order-agent`. The MCP layer resolves external client IDs before calling the certificate API.
-
-`idm_issue_client_certificate_from_csr` accepts optional `validityDays` from 1 to 90 and returns the signed public certificate as top-level `certificatePem`.
-`idm_onboard_machine_client` can create or update a machine client, assign roles/scopes, and optionally register or issue an initial certificate from either an external certificate PEM or a CSR. CSR-issued certificates currently accept `certificateValidityDays` from 1 to 90.
-`idm_rotate_machine_client_certificate` issues a replacement certificate from a CSR and can revoke a previous certificate when `confirmRevoke: true` is supplied.
-`idm_prepare_dpop_client_credential_instructions` returns discovery-backed setup instructions for DPoP-bound client credentials.
-`idm_preflight_machine_client_deployment` checks activation, required roles/scopes, active certificates, certificate expiry, and deployment readiness.
-
----
-
-## Running locally
+## Quick start
 
 ```bash
 dotnet run --project src/Backend.Api
 ```
 
-The API starts on `http://localhost:5000`. The SQLite database (`idm.db`) is created automatically on first run via EF Core migrations.
+The API starts on `http://localhost:5000`. The SQLite database is created on
+first run via EF Core migrations. Swagger UI is available at `/swagger` in
+Development mode.
 
-For the demo scripts, use an explicit URL, issuer, signing key path, seeded admin client, and disposable database path so the scripts and token issuer agree on the local origin:
-
-```bash
-AuthorizationServer__Issuer=http://localhost:5000 \
-AuthorizationServer__Audience=idm-demo-api \
-AuthorizationServer__McpAudience=idm-demo-mcp \
-AuthorizationServer__SigningKeyPath=/tmp/idmdemo-signing-key.json \
-AuthorizationServer__EnableForwardedClientCertificate=true \
-ScimAdmin__SeedClientId=idm-admin \
-ScimAdmin__SeedCertPath=/tmp/idmdemo-dev/admin-client.pem \
-ScimAdmin__GenerateCertIfMissing=true \
-ConnectionStrings__Default="Data Source=idm-demo.db" \
-dotnet run --project src/Backend.Api --urls http://localhost:5000
-```
-
-### Demo script
+Demo scripts exercise the major flows end-to-end:
 
 ```bash
-bash scripts/demo-api.sh          # run all scenarios, show pass/fail
-bash scripts/demo-api.sh --verbose  # show full request and response for each call
-bash scripts/demo-certificates.sh # run certificate lifecycle scenarios
-bash scripts/demo-auth.sh         # run OAuth mTLS and DPoP token scenarios
-bash scripts/demo-access-management.sh # run role/scope catalog and assignment scenarios
-bash scripts/demo-mcp-local-stdio.sh # run local stdio MCP smoke scenarios
-bash scripts/demo-mcp-local-hosted-development.sh # run local hosted MCP bearer and DPoP scenarios
-bash scripts/demo-mcp-phase-5-workflows.sh # run hosted MCP workflow scenarios
-bash scripts/demo-mcp-hosted-production.sh # run hosted production DPoP scenarios
-bash scripts/demo-mcp-remote-production-smoke.sh # run remote public auth/MCP smoke scenarios
+bash scripts/demo-api.sh             # API lifecycle scenarios
+bash scripts/demo-auth.sh            # OAuth mTLS and DPoP token scenarios
+bash scripts/demo-certificates.sh    # certificate lifecycle scenarios
+bash scripts/demo-mcp-local-stdio.sh # local MCP stdio scenarios
 ```
 
-Environment overrides:
-
-```bash
-API_BASE_URL=https://your-host ADMIN_CERT_PATH=./admin-client.pem bash scripts/demo-api.sh
-API_BASE_URL=https://your-host ADMIN_CERT_PATH=./admin-client.pem bash scripts/demo-certificates.sh
-API_BASE_URL=https://your-host ADMIN_CERT_PATH=./admin-client.pem bash scripts/demo-auth.sh
-API_BASE_URL=https://your-host ADMIN_CERT_PATH=./admin-client.pem bash scripts/demo-access-management.sh
-API_BASE_URL=https://your-api MCP_BASE_URL=https://your-mcp ADMIN_CERT_PATH=./admin-client.pem MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-local-hosted-development.sh
-API_BASE_URL=http://127.0.0.1:5000 AUTH_BASE_URL=http://127.0.0.1:5000 AUTH_DPOP_BASE_URL=https://auth.idp.madmetal.org MCP_BASE_URL=https://mcp.idp.madmetal.org MCP_HEALTH_BASE_URL=http://127.0.0.1:5100 ADMIN_CERT_PATH=/tmp/idmdemo-prod-admin-client.pem MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-hosted-production.sh
-AUTH_BASE_URL=https://auth.idp.madmetal.org AUTH_DPOP_BASE_URL=https://auth.idp.madmetal.org MCP_BASE_URL=https://mcp.idp.madmetal.org ADMIN_CERT_PATH=./idmdemo-prod-admin-client.pem MCP_AUDIENCE=idm-demo-mcp bash scripts/demo-mcp-remote-production-smoke.sh
-```
-
-Current production architecture and smoke-test notes are in
-[`docs/current-architecture.md`](docs/current-architecture.md). Older epic and
-deployment notes are archived in [`docs/archive/`](docs/archive/).
-
----
-
-## Repository structure
-
-```
-.
-├── src/
-│   ├── Backend.Api/            # ASP.NET Core Web API, controllers, middleware, Program.cs
-│   ├── Backend.Application/    # Services, DTOs, SCIM filter parser
-│   ├── Backend.Domain/         # Entities, repository interfaces, domain exceptions
-│   ├── Backend.Infrastructure/ # EF Core DbContext, SQLite, repositories, migrations
-│   └── Backend.Mcp/            # MCP Resource Server / IdP Admin Interface tools
-├── tests/
-│   ├── Backend.Tests/          # Unit tests (xUnit + NSubstitute)
-│   └── Backend.IntegrationTests/ # End-to-end tests (WebApplicationFactory + SQLite)
-├── scripts/
-│   ├── demo-api.sh             # curl-based API demo with optional verbose mode
-│   ├── demo-certificates.sh    # certificate lifecycle demo
-│   ├── demo-auth.sh            # OAuth mTLS and DPoP token demo
-│   ├── demo-access-management.sh # role/scope catalog and assignment demo
-│   ├── demo-mcp-local-stdio.sh # local stdio MCP demo
-│   ├── demo-mcp-local-hosted-development.sh # local hosted MCP demo
-│   ├── demo-mcp-hosted-production.sh # hosted production MCP demo
-│   ├── demo-mcp-remote-production-smoke.sh # public remote production smoke demo
-│   ├── demo-mcp-phase-5-workflows.sh # MCP workflow demo
-│   ├── lib/mcp-demo-helpers.sh # shared hosted MCP demo helpers
-│   ├── check-complexity.sh
-│   ├── check-duplicates.sh
-│   ├── check-secrets.sh
-│   └── check-vulnerabilities.sh
-├── .github/workflows/ci.yml    # GitHub Actions CI pipeline
-├── .editorconfig               # Formatting and analyzer rules
-├── .pre-commit-config.yaml     # Git pre-commit hooks
-├── Directory.Build.props       # Shared MSBuild properties and analyzers
-├── Makefile
-└── product.md                  # Product roadmap and engineering standards
-```
+For full local configuration, MCP profiles, hosted deployment, and production
+smoke tests see [docs/current-architecture.md](docs/current-architecture.md).
 
 ---
 
@@ -444,13 +134,45 @@ deployment notes are archived in [`docs/archive/`](docs/archive/).
 | Secrets | gitleaks | zero secrets detected |
 | Vulnerabilities | `dotnet list package --vulnerable` | zero known CVEs |
 
-Run all gates:
-
 ```bash
 make check
 ```
 
-Individual targets: `make build`, `make lint`, `make test`, `make coverage`, `make complexity`, `make duplicates`, `make security`, `make secrets`, `make vulnerabilities`.
+Individual targets: `make build`, `make lint`, `make test`, `make coverage`,
+`make complexity`, `make duplicates`, `make security`, `make secrets`,
+`make vulnerabilities`.
+
+See [docs/pipeline.md](docs/pipeline.md) for the full layer inventory — which
+checks run at pre-commit, which are CI gates, and how coverage scope is
+determined per-assembly.
+
+---
+
+## Repository structure
+
+```
+.
+├── src/
+│   ├── Backend.Api/              # ASP.NET Core Web API, controllers, middleware, Program.cs
+│   ├── Backend.Application/      # Services, DTOs, SCIM filter parser
+│   ├── Backend.Domain/           # Entities, repository interfaces, domain exceptions
+│   ├── Backend.Infrastructure/   # EF Core DbContext, SQLite, repositories, migrations
+│   └── Backend.Mcp/              # MCP Resource Server / IdP Admin Interface tools
+├── tests/
+│   ├── Backend.Tests/            # Unit tests (xUnit + NSubstitute)
+│   └── Backend.IntegrationTests/ # End-to-end tests (WebApplicationFactory + SQLite)
+├── scripts/                      # curl-based demo and smoke-test scripts
+├── docs/
+│   ├── current-architecture.md   # Runtime source of truth: services, boundaries, token flow
+│   ├── pipeline.md               # CI/CD pipeline notes
+│   └── archive/                  # Historical epic and deployment notes
+├── .github/workflows/ci.yml      # GitHub Actions CI pipeline
+├── .editorconfig                 # Formatting and analyzer rules
+├── .pre-commit-config.yaml       # Git pre-commit hooks
+├── Directory.Build.props         # Shared MSBuild properties and analyzers
+├── Makefile
+└── product.md                    # Product roadmap and engineering standards
+```
 
 ---
 
@@ -469,93 +191,15 @@ Individual targets: `make build`, `make lint`, `make test`, `make coverage`, `ma
 make install-tools
 ```
 
----
-
-## Pre-commit hooks
-
-Hooks run automatically on `git commit`:
-
-1. Trailing whitespace / end-of-file
-2. YAML validity
-3. Hardcoded credentials (gitleaks)
-4. Code formatting (`dotnet format --verify-no-changes`)
-5. Build (`dotnet build -warnaserror`)
-6. Tests + coverage ≥ 80%
-7. No vulnerable NuGet packages
-
----
-
-## Configuration
-
-`src/Backend.Api/appsettings.json`:
-
-```json
-{
-  "ConnectionStrings": { "Default": "Data Source=idm.db" },
-  "AuthorizationServer": {
-    "Issuer": "https://idmdemo.test",
-    "Audience": "idm-demo-mcp",
-    "AccessTokenLifetimeSeconds": 300,
-    "RequireDpop": true,
-    "DpopProofLifetimeSeconds": 300,
-    "DpopReplayCacheSeconds": 300,
-    "DpopSupportedAlgorithms": [ "ES256", "RS256" ],
-    "SigningKeyPath": "signing-key.json",
-    "ForwardedClientCertificateHeader": "X-Client-Cert",
-    "EnableForwardedClientCertificate": false
-  },
-  "ScimAdmin": {
-    "SeedClientId": "idm-admin",
-    "SeedCertPath": "admin-client.pem",
-    "GenerateCertIfMissing": true
-  }
-}
-```
-
-`RequireDpop` should stay enabled outside local bearer-token smoke tests. Bearer tokens are intentionally not replay-protected per request; DPoP sender-constrains the access token and the 300-second default lifetime keeps any explicitly enabled bearer fallback short-lived.
-
-`Backend.Mcp` is configured through environment variables or configuration providers:
-
-```json
-{
-  "IdmApiInstances": {
-    "local": {
-      "BaseUrl": "http://127.0.0.1:5000",
-      "ClientId": "idm-admin",
-      "ClientCertificatePath": "admin-client.pem"
-    }
-  },
-  "Mcp": {
-    "Profile": "LocalStdio",
-    "DefaultInstance": "local",
-    "ReadOnly": false,
-    "Hosted": {
-      "Audience": "idm-demo-mcp"
-    }
-  }
-}
-```
-
-Override via environment variables for deployment:
-
-```bash
-ConnectionStrings__Default="Data Source=/data/idm.db" \
-AuthorizationServer__Issuer=https://issuer.example.test \
-AuthorizationServer__Audience=idm-demo-api \
-AuthorizationServer__McpAudience=idm-demo-mcp \
-AuthorizationServer__SigningKeyPath=/keys/signing-key.json \
-ScimAdmin__SeedClientId=idm-admin \
-ScimAdmin__SeedCertPath=/keys/admin-client.pem \
-IdmApiInstances__local__BaseUrl=https://issuer.example.test \
-IdmApiInstances__local__ClientId=idm-admin \
-IdmApiInstances__local__ClientCertificatePath=/keys/admin-client.pem \
-dotnet run
-```
+Pre-commit hooks run on `git commit`: trailing whitespace, YAML validity,
+gitleaks secret scan, `dotnet format`, build, tests + coverage ≥ 80%, and NuGet
+vulnerability check.
 
 ---
 
 ## CI/CD
 
-GitHub Actions runs on every push and pull request to `main`. It executes the same gates as `make check`. See `.github/workflows/ci.yml`.
-
-Dependabot automatically opens PRs for outdated NuGet packages and GitHub Actions weekly.
+GitHub Actions runs on every push and pull request to `main`, executing the same
+gates as `make check`. Dependabot opens weekly PRs for outdated NuGet packages
+and GitHub Actions. See `.github/workflows/ci.yml` and
+[docs/pipeline.md](docs/pipeline.md).
