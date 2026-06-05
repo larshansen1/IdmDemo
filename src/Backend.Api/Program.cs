@@ -2,7 +2,7 @@ using Backend.Api.Composition;
 using Backend.Api.Extensions;
 using Backend.Api.Middleware;
 using Backend.Infrastructure.Extensions;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 

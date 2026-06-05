@@ -51,7 +51,7 @@ if (transport == McpTransport.Http)
         ForwardLimit = 1,
         RequireHeaderSymmetry = false,
     };
-    forwardedHeadersOptions.KnownNetworks.Clear();
+    forwardedHeadersOptions.KnownIPNetworks.Clear();
     forwardedHeadersOptions.KnownProxies.Clear();
 
     var app = builder.Build();

@@ -54,6 +54,6 @@ public sealed class ClientCertificateReader : IClientCertificateReader
             return X509Certificate2.CreateFromPem(value);
         }
 
-        return new X509Certificate2(Convert.FromBase64String(value));
+        return X509CertificateLoader.LoadCertificate(Convert.FromBase64String(value));
     }
 }
