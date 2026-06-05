@@ -13,7 +13,7 @@ COPY src/Backend.Api/Backend.Api.csproj src/Backend.Api/
 RUN dotnet restore src/Backend.Api/Backend.Api.csproj
 
 COPY src/ src/
-RUN dotnet build src/Backend.Api/Backend.Api.csproj \
+RUN dotnet publish src/Backend.Api/Backend.Api.csproj \
     --configuration Release \
     --no-restore \
     --output /app/publish
