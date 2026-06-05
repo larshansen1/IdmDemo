@@ -4,9 +4,41 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
+    groups:
+      ef-core:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+          - "dotnet-ef"
+      extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+      identity:
+        patterns:
+          - "Microsoft.IdentityModel.*"
+      test-tooling:
+        patterns:
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.*"
+          - "xunit*"
+    ignore:
+      # Extensions packages follow the .NET runtime release cycle.
+      # Bump these only after the TFM is upgraded (tracked in a separate issue).
+      - dependency-name: "Microsoft.Extensions.*"
+        versions: ["9.*", "10.*"]
+      # dotnet-ef tool must match EF Core major version; defer 10.x until TFM decision.
+      - dependency-name: "dotnet-ef"
+        versions: ["10.*"]
+      # Swashbuckle 6→10 is a breaking rewrite; treat as a dedicated spike, not a bump.
+      - dependency-name: "Swashbuckle.AspNetCore"
+        versions: ["7.*", "8.*", "9.*", "10.*"]
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      docker-actions:
+        patterns:
+          - "docker/*"
