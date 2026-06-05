@@ -2,7 +2,7 @@
 
 ## Layer inventory
 
-| Check | Pre-commit | CI — Fast | CI — Slow | `make check` |
+| Check | Pre-commit | CI — build-and-test | CI — static-analysis | `make check` |
 |---|---|---|---|---|
 | Whitespace / EOF / YAML / merge conflict | ✓ | — | — | — |
 | `dotnet-format` (verify) | ✓ | ✓ | — | ✓ (lint) |
@@ -18,9 +18,9 @@
 ## Design principles
 
 - **Pre-commit** gives fast author-side feedback: formatting, build errors, accidental secrets, and coverage regressions scoped to the assemblies you actually changed (unit tests only; integration tests and `Backend.Infrastructure` excluded). Skips entirely on non-source commits.
-- **CI Fast** (~3–5 min) is the mandatory PR gate for correctness and security: full build with Roslyn analyzers, full test suite with 80% coverage, secrets scan, and vulnerability check.
-- **CI Slow** (~10+ min) runs in parallel with CI Fast and gates deployment on code health: cyclomatic complexity and duplicate code detection.
-- **`make check`** mirrors the full CI pipeline for a local pre-flight run. Both `quality-fast` and `quality-slow` must pass before `deploy-production` triggers.
+- **CI `build-and-test`** is the mandatory PR gate for correctness and security: full build with Roslyn analyzers, full test suite with 80% coverage, secrets scan, and vulnerability check.
+- **CI `static-analysis`** runs in parallel with `build-and-test` and gates deployment on code health: cyclomatic complexity and duplicate code detection. Both jobs must pass before `deploy-production` triggers.
+- **`make check`** mirrors the full CI pipeline for a local pre-flight run.
 
 ## Pre-commit coverage scope
 

@@ -7,8 +7,8 @@ on:
     branches: ["main"]
 
 jobs:
-  quality-fast:
-    name: Quality Gates — Fast
+  build-and-test:
+    name: Build and Test
     runs-on: ubuntu-latest
 
     steps:
@@ -80,8 +80,8 @@ jobs:
       - name: Vulnerability check
         run: bash scripts/check-vulnerabilities.sh
 
-  quality-slow:
-    name: Quality Gates — Slow
+  static-analysis:
+    name: Static Analysis
     runs-on: ubuntu-latest
 
     steps:
@@ -123,7 +123,7 @@ jobs:
   deploy-production:
     name: Deploy Production
     runs-on: [self-hosted, workhorse-idmdemo]
-    needs: [quality-fast, quality-slow]
+    needs: [build-and-test, static-analysis]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
