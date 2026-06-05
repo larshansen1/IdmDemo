@@ -20,6 +20,7 @@
 - **Pre-commit** gives fast author-side feedback: formatting, build errors, accidental secrets, and coverage regressions scoped to the assemblies you actually changed (unit tests only; integration tests and `Backend.Infrastructure` excluded). Skips entirely on non-source commits.
 - **CI `build-and-test`** is the mandatory PR gate for correctness and security: full build with Roslyn analyzers, full test suite with 80% coverage, secrets scan, and vulnerability check.
 - **CI `static-analysis`** runs in parallel with `build-and-test` and gates deployment on code health: cyclomatic complexity and duplicate code detection. Both jobs must pass before `deploy-production` triggers.
+- **`deploy-production`** only rebuilds and pushes containers when `src/`, `Directory.Build.props`, or `global.json` changed. Commits that only touch docs, scripts, or CI config skip the Docker build entirely. Layer cache is persisted to `/tmp/.buildx-cache` on the self-hosted runner between runs.
 - **`make check`** mirrors the full CI pipeline for a local pre-flight run.
 
 ## Pre-commit coverage scope

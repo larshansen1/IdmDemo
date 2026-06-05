@@ -13,7 +13,7 @@ COPY src/Backend.Mcp/Backend.Mcp.csproj src/Backend.Mcp/
 RUN dotnet restore src/Backend.Mcp/Backend.Mcp.csproj
 
 COPY src/ src/
-RUN dotnet build src/Backend.Mcp/Backend.Mcp.csproj \
+RUN dotnet publish src/Backend.Mcp/Backend.Mcp.csproj \
     --configuration Release \
     --no-restore \
     --output /app/publish
