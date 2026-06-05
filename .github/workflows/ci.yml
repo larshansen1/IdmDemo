@@ -20,21 +20,21 @@ jobs:
           dotnet-version: "8.x"
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Cache .NET local tools
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.dotnet/tools
           key: dotnet-tools-${{ hashFiles('.config/dotnet-tools.json') }}
 
       - name: Cache gitleaks binary
         id: cache-gitleaks
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/local/bin/gitleaks
           key: gitleaks-8.21.2-linux-x64
@@ -98,13 +98,13 @@ jobs:
           node-version: "20"
 
       - name: Cache pip packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-lizard
 
       - name: Cache npm packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: npm-${{ runner.os }}-jscpd
