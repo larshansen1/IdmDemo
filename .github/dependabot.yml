@@ -21,6 +21,9 @@ updates:
           - "Microsoft.NET.Test.Sdk"
           - "coverlet.*"
           - "xunit*"
+      mcp:
+        patterns:
+          - "ModelContextProtocol*"
     ignore:
       # Extensions packages follow the .NET runtime release cycle.
       # Bump these only after the TFM is upgraded (tracked in a separate issue).
