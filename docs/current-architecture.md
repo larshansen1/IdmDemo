@@ -74,7 +74,14 @@ Administrative API calls require:
 The `scim.admin` role and the configured admin machine client are seeded by
 `ScimAdminSeeder`. In production the seeded client is `idm-mcp-backend` by
 default and its certificate is stored in the Docker `idmdemo-keys` volume at
-`/keys/mcp-client.pem`.
+`/keys/mcp-client.pem`. This credential is for the MCP service to call the
+private admin API; it is not the normal public MCP smoke-test identity.
+
+Production MCP smoke tests use a separate low-privilege machine client,
+`idm-mcp-smoke` by default. That client has no roles and only the MCP scope
+needed by the smoke test, normally `idm.mcp.read`. Its private key stays with
+the operator or runner through `SMOKE_CERT_PATH`; IdmDemo stores only the public
+certificate metadata and thumbprint.
 
 ## Production Endpoint Matrix
 
@@ -105,21 +112,25 @@ default and its certificate is stored in the Docker `idmdemo-keys` volume at
 
 ## Smoke Tests
 
-Remote public auth smoke from any machine with the production admin PEM:
+Remote public auth smoke from any machine with the production smoke PEM:
 
 ```bash
 curl -sS \
-  --cert ./idmdemo-prod-admin-client.pem \
-  --key ./idmdemo-prod-admin-client.pem \
+  --cert ./idmdemo-prod-mcp-smoke-client.pem \
+  --key ./idmdemo-prod-mcp-smoke-client.pem \
   -H "Content-Type: application/x-www-form-urlencoded" \
   --data-urlencode "grant_type=client_credentials" \
-  --data-urlencode "client_id=idm-mcp-backend" \
+  --data-urlencode "client_id=idm-mcp-smoke" \
+  --data-urlencode "scope=idm.mcp.read" \
+  --data-urlencode "resource=idm-demo-mcp" \
   https://auth.idp.madmetal.org/connect/token
 ```
 
 This proves public remote client-certificate authentication and token issuance.
 
-Full hosted production smoke from the deployment host:
+Bootstrap or update the persistent low-privilege smoke identity from the
+deployment host. The script is dry-run by default; use `--apply` after reviewing
+the planned changes.
 
 ```bash
 docker compose cp backend-api:/keys/mcp-client.pem /tmp/idmdemo-prod-admin-client.pem
@@ -129,19 +140,32 @@ ADMIN_CLIENT_ID=idm-mcp-backend \
 ADMIN_CERT_PATH=/tmp/idmdemo-prod-admin-client.pem \
 API_BASE_URL=http://127.0.0.1:5000 \
 AUTH_BASE_URL=http://127.0.0.1:5000 \
+SMOKE_CLIENT_ID=idm-mcp-smoke \
+SMOKE_CERT_PATH=/tmp/idmdemo-prod-mcp-smoke-client.pem \
+SMOKE_SCOPE=idm.mcp.read \
+bash scripts/bootstrap-mcp-production-smoke.sh --apply
+```
+
+Full hosted production smoke from the deployment host:
+
+```bash
+SMOKE_CLIENT_ID=idm-mcp-smoke \
+SMOKE_CERT_PATH=/tmp/idmdemo-prod-mcp-smoke-client.pem \
+MCP_REMOTE_SCOPE=idm.mcp.read \
+AUTH_BASE_URL=https://auth.idp.madmetal.org \
 AUTH_DPOP_BASE_URL=https://auth.idp.madmetal.org \
 MCP_BASE_URL=https://mcp.idp.madmetal.org \
-MCP_HEALTH_BASE_URL=http://127.0.0.1:5100 \
 MCP_AUDIENCE=idm-demo-mcp \
-bash scripts/demo-mcp-hosted-production.sh -v
+bash scripts/demo-mcp-remote-production-smoke.sh -v
 ```
 
 Use the remote-only smoke script when private health and SCIM setup are not
 available:
 
 ```bash
-ADMIN_CLIENT_ID=idm-mcp-backend \
-ADMIN_CERT_PATH=./idmdemo-prod-admin-client.pem \
+SMOKE_CLIENT_ID=idm-mcp-smoke \
+SMOKE_CERT_PATH=./idmdemo-prod-mcp-smoke-client.pem \
+MCP_REMOTE_SCOPE=idm.mcp.read \
 AUTH_BASE_URL=https://auth.idp.madmetal.org \
 AUTH_DPOP_BASE_URL=https://auth.idp.madmetal.org \
 MCP_BASE_URL=https://mcp.idp.madmetal.org \
@@ -151,3 +175,7 @@ bash scripts/demo-mcp-remote-production-smoke.sh -v
 
 That script skips private health checks and private SCIM setup. A tool call
 requires the client identity to already have the required MCP scope.
+
+After the smoke test, the DPoP-bound access token expires naturally. The
+`idm-mcp-smoke` client and certificate remain for repeatable smoke checks until
+the operator rotates or revokes the smoke certificate.
