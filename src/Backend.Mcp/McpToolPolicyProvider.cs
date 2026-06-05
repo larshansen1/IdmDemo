@@ -19,8 +19,15 @@ public sealed class McpToolPolicyProvider : IMcpToolPolicyProvider
 
     public McpToolPolicyProvider()
     {
-        this._policies = typeof(IdmAdminTools)
-            .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+        this._policies = new[]
+            {
+                typeof(IdmUserTools),
+                typeof(IdmMachineClientTools),
+                typeof(IdmCatalogTools),
+                typeof(IdmCertificateTools),
+                typeof(IdmWorkflowTools),
+            }
+            .SelectMany(type => type.GetMethods(BindingFlags.Instance | BindingFlags.Public))
             .Select(method => method.GetCustomAttribute<McpServerToolAttribute>())
             .Where(attribute => attribute is not null)
             .Select(attribute =>

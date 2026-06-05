@@ -7,10 +7,17 @@ namespace Backend.Tests.Mcp;
 public sealed class IdmToolRegistrationTests
 {
     [Fact]
-    public void IdmAdminTools_ExposesExpectedToolNames()
+    public void ToolClasses_ExposesExpectedToolNames()
     {
-        var toolNames = typeof(IdmAdminTools)
-            .GetMethods()
+        var toolNames = new[]
+            {
+                typeof(IdmUserTools),
+                typeof(IdmMachineClientTools),
+                typeof(IdmCatalogTools),
+                typeof(IdmCertificateTools),
+                typeof(IdmWorkflowTools),
+            }
+            .SelectMany(type => type.GetMethods())
             .Select(method => method.GetCustomAttributes(typeof(McpServerToolAttribute), false)
                 .OfType<McpServerToolAttribute>()
                 .SingleOrDefault()?.Name)

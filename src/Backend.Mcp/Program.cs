@@ -39,7 +39,11 @@ if (transport == McpTransport.Http)
                 return filter.InvokeAsync(next, context, cancellationToken);
             });
         })
-        .WithTools<IdmAdminTools>();
+        .WithTools<IdmUserTools>()
+        .WithTools<IdmMachineClientTools>()
+        .WithTools<IdmCatalogTools>()
+        .WithTools<IdmCertificateTools>()
+        .WithTools<IdmWorkflowTools>();
 
     var forwardedHeadersOptions = new ForwardedHeadersOptions
     {
@@ -70,6 +74,10 @@ else
             options.ServerInfo = new() { Name = "idm-demo-mcp", Version = "1.0.0" };
         })
         .WithStdioServerTransport()
-        .WithTools<IdmAdminTools>();
+        .WithTools<IdmUserTools>()
+        .WithTools<IdmMachineClientTools>()
+        .WithTools<IdmCatalogTools>()
+        .WithTools<IdmCertificateTools>()
+        .WithTools<IdmWorkflowTools>();
     await builder.Build().RunAsync().ConfigureAwait(false);
 }
