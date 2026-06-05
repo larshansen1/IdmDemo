@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY Template.sln ./
@@ -18,7 +18,7 @@ RUN dotnet publish src/Backend.Mcp/Backend.Mcp.csproj \
     --no-restore \
     --output /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 EXPOSE 8080
 

@@ -6,6 +6,7 @@
     <AnalysisMode>All</AnalysisMode>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <LangVersion>latest</LangVersion>
+    <NoWarn>$(NoWarn);CA1515;CA1873</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
