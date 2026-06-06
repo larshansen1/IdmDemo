@@ -205,3 +205,27 @@ jobs:
       - name: Deploy
         if: steps.changes.outputs.src-changed == 'true'
         run: /home/admin/docker/idmdemo/deploy.sh '${{ github.sha }}'
+
+      - name: Run remote MCP production smoke
+        if: steps.changes.outputs.src-changed == 'true'
+        env:
+          SMOKE_CLIENT_ID: idm-mcp-smoke
+          SMOKE_CERT_PATH: ${{ runner.temp }}/idmdemo-prod-mcp-smoke-client.pem
+          SMOKE_CERT_PEM: ${{ secrets.MCP_PRODUCTION_SMOKE_CLIENT_CERT_PEM }}
+          MCP_REMOTE_SCOPE: idm.mcp.read
+          AUTH_BASE_URL: https://auth.idp.madmetal.org
+          AUTH_DPOP_BASE_URL: https://auth.idp.madmetal.org
+          MCP_BASE_URL: https://mcp.idp.madmetal.org
+          MCP_AUDIENCE: idm-demo-mcp
+        run: |
+          if [ -z "$SMOKE_CERT_PEM" ]; then
+            echo "MCP_PRODUCTION_SMOKE_CLIENT_CERT_PEM secret is required for production MCP smoke." >&2
+            echo "Bootstrap the persistent low-privilege smoke client before deploying." >&2
+            exit 1
+          fi
+
+          umask 077
+          printf '%s\n' "$SMOKE_CERT_PEM" > "$SMOKE_CERT_PATH"
+          trap 'rm -f "$SMOKE_CERT_PATH"' EXIT
+
+          bash scripts/demo-mcp-remote-production-smoke.sh -v
