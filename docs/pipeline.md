@@ -21,7 +21,34 @@
 - **CI `build-and-test`** is the mandatory PR gate for correctness and security: full build with Roslyn analyzers, full test suite with 80% coverage, secrets scan, and vulnerability check.
 - **CI `static-analysis`** runs in parallel with `build-and-test` and gates deployment on code health: cyclomatic complexity and duplicate code detection. Both jobs must pass before `deploy-production` triggers.
 - **`deploy-production`** only rebuilds and pushes containers when `src/`, `Directory.Build.props`, or `global.json` changed. Commits that only touch docs, scripts, or CI config skip the Docker build entirely. Layer cache is persisted to `/tmp/.buildx-cache` on the self-hosted runner between runs.
+- **Production MCP smoke** runs after a successful production deploy. It uses the persistent low-privilege `idm-mcp-smoke` client, requests `idm.mcp.read` for the `idm-demo-mcp` audience, and fails the deploy job if public discovery, DPoP token issuance, token claims, MCP `initialize`, `tools/list`, or a read tool call fails.
 - **`make check`** mirrors the full CI pipeline for a local pre-flight run.
+
+## Production MCP Smoke Prerequisite
+
+Bootstrap or rotate the persistent smoke identity manually before relying on
+production deploys. Run `scripts/bootstrap-mcp-production-smoke.sh --apply` from
+the deployment host with the backend/admin credential, then store the resulting
+smoke client PEM as the GitHub secret
+`MCP_PRODUCTION_SMOKE_CLIENT_CERT_PEM`.
+
+The deploy workflow materializes that secret into a temporary runner file and
+runs:
+
+```bash
+SMOKE_CLIENT_ID=idm-mcp-smoke \
+SMOKE_CERT_PATH="$RUNNER_TEMP/idmdemo-prod-mcp-smoke-client.pem" \
+MCP_REMOTE_SCOPE=idm.mcp.read \
+AUTH_BASE_URL=https://auth.idp.madmetal.org \
+AUTH_DPOP_BASE_URL=https://auth.idp.madmetal.org \
+MCP_BASE_URL=https://mcp.idp.madmetal.org \
+MCP_AUDIENCE=idm-demo-mcp \
+bash scripts/demo-mcp-remote-production-smoke.sh -v
+```
+
+Deploy does not create or update the smoke client. Missing, mismatched, or
+under-scoped smoke certificate material should fail the deploy job with the
+remote smoke script's diagnostics.
 
 ## Pre-commit coverage scope
 
