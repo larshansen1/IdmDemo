@@ -109,6 +109,24 @@ public sealed class IdmApiTokenProviderTests : IDisposable
             provider.GetBoundTokenAsync("prod-err"));
     }
 
+    [Fact]
+    public async Task GetBoundTokenAsync_AuthorityUrlSet_DpopHtuUsesAuthorityUrl()
+    {
+        var authority = new Uri("https://auth.example.com/");
+        var (provider, handler) = CreateProviderWithAuthority(this._certPath, authority, "authority-token", expiresIn: 300);
+
+        await provider.GetBoundTokenAsync("prod-authority");
+
+        Assert.NotNull(handler.LastRequest);
+        var dpopHeader = handler.LastRequest!.Headers.GetValues("DPoP").Single();
+        var parts = dpopHeader.Split('.');
+        var payloadJson = System.Text.Encoding.UTF8.GetString(
+            Convert.FromBase64String(parts[1].Replace('-', '+').Replace('_', '/').PadRight(
+                parts[1].Length + ((4 - (parts[1].Length % 4)) % 4), '=')));
+        using var payload = System.Text.Json.JsonDocument.Parse(payloadJson);
+        Assert.Equal("https://auth.example.com/connect/token", payload.RootElement.GetProperty("htu").GetString());
+    }
+
     private static (IdmApiTokenProvider Provider, CapturingTokenHandler Handler) CreateProvider(
         string certPath, string accessToken, int expiresIn)
     {
@@ -116,6 +134,23 @@ public sealed class IdmApiTokenProviderTests : IDisposable
         var handler = new CapturingTokenHandler(response);
         var factory = CreateFactory(handler);
         return (CreateProviderWith(certPath, factory), handler);
+    }
+
+    private static (IdmApiTokenProvider Provider, CapturingTokenHandler Handler) CreateProviderWithAuthority(
+        string certPath, Uri authorityUrl, string accessToken, int expiresIn)
+    {
+        var response = new TokenResponse { AccessToken = accessToken, ExpiresIn = expiresIn };
+        var handler = new CapturingTokenHandler(response);
+        var resolver = Substitute.For<IIdmApiInstanceResolver>();
+        resolver.Resolve(Arg.Any<string>()).Returns(call =>
+            new ResolvedIdmApiInstance(
+                call.ArgAt<string?>(0) ?? "prod",
+                new Uri("http://internal-host:8080/"),
+                "test-client",
+                certPath,
+                authorityUrl));
+        var factory = CreateFactory(handler);
+        return (new IdmApiTokenProvider(resolver, factory), handler);
     }
 
     private static IdmApiTokenProvider CreateProviderWith(string certPath, IHttpClientFactory factory)

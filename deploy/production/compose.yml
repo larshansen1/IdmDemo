@@ -73,6 +73,7 @@ services:
       AuthorizationServer__Issuer: https://auth.idp.madmetal.org
       AuthorizationServer__SigningKeyPath: /keys/signing-key.json
       IdmApiInstances__local__BaseUrl: http://backend-api:8080
+      IdmApiInstances__local__AuthorityUrl: https://auth.idp.madmetal.org
       IdmApiInstances__local__ClientId: ${IDM_MCP_CLIENT_ID:-idm-mcp-backend}
       IdmApiInstances__local__ClientCertificatePath: /keys/mcp-client.pem
       Mcp__DefaultInstance: local
