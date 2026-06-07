@@ -435,7 +435,16 @@ issue_dpop_token() {
 
 token_client_certificate_args() {
     local -n args_ref="$1"
-    args_ref=(-H "X-Client-Cert: $CLIENT_CERT_DER_BASE64")
+
+    args_ref=()
+    case "$AUTH" in
+        https://*)
+            args_ref+=(--cert "$WORKDIR/client.crt" --key "$WORKDIR/client.key")
+            ;;
+        *)
+            args_ref+=(-H "X-Client-Cert: $CLIENT_CERT_DER_BASE64")
+            ;;
+    esac
 }
 
 mcp_post_with_auth() {
