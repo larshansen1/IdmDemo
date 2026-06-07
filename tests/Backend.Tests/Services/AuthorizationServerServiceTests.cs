@@ -4,12 +4,10 @@ using System.Text;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
 using Backend.Application.Services;
+using Backend.As.Domain;
 using Backend.As.Domain.Services;
-using Backend.Idp.Domain.Entities;
-using Backend.Idp.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NSubstitute.ReturnsExtensions;
 using Xunit;
 
 namespace Backend.Tests.Services;
@@ -52,16 +50,12 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_ValidRequest_ReturnsJwt()
     {
         using var certificate = CreateCertificate();
-        var client = CreateClient(certificate);
-        client.AssignScopes(["orders.read", "orders.write"]);
-        client.AssignRoles(["service-admin"]);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var service = CreateService(repository);
+        var context = CreateContext(certificate, ["orders.read", "orders.write"], ["service-admin"]);
+        var service = CreateService(context: context);
 
         var response = await service.IssueClientCredentialsTokenAsync(
             "client_credentials",
-            client.ClientId,
+            context.ClientId,
             "orders.read",
             certificate);
 
@@ -74,8 +68,8 @@ public sealed class AuthorizationServerServiceTests
 
         var payload = ReadJwtPayload(response.AccessToken);
         Assert.Equal("https://issuer.test", payload.GetProperty("iss").GetString());
-        Assert.Equal(client.Id.ToString(), payload.GetProperty("sub").GetString());
-        Assert.Equal(client.ClientId, payload.GetProperty("client_id").GetString());
+        Assert.Equal(context.ClientRecordId.ToString(), payload.GetProperty("sub").GetString());
+        Assert.Equal(context.ClientId, payload.GetProperty("client_id").GetString());
         Assert.Equal("api://default", payload.GetProperty("aud").GetString());
         Assert.Equal("orders.read", payload.GetProperty("scope").GetString());
         Assert.Equal("service-admin", payload.GetProperty("roles")[0].GetString());
@@ -87,10 +81,7 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_ValidDpopProof_ReturnsDpopBoundJwt()
     {
         using var certificate = CreateCertificate();
-        var client = CreateClient(certificate);
-        client.AssignScopes(["orders.read"]);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        var context = CreateContext(certificate, ["orders.read"]);
         var dpopProofValidator = Substitute.For<IDpopProofValidator>();
         dpopProofValidator
             .ValidateTokenEndpointProofAsync(
@@ -98,11 +89,11 @@ public sealed class AuthorizationServerServiceTests
                 new Uri("https://issuer.test/connect/token"),
                 Arg.Any<CancellationToken>())
             .Returns(new ValidatedDpopProof { JwkThumbprint = "test-jkt" });
-        var service = CreateService(repository, dpopProofValidator: dpopProofValidator);
+        var service = CreateService(context: context, dpopProofValidator: dpopProofValidator);
 
         var response = await service.IssueClientCredentialsTokenAsync(
             "client_credentials",
-            client.ClientId,
+            context.ClientId,
             "orders.read",
             certificate,
             "proof.jwt");
@@ -118,15 +109,12 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_McpResourceWithMcpScope_ReturnsMcpAudienceJwt()
     {
         using var certificate = CreateCertificate();
-        var client = CreateClient(certificate);
-        client.AssignScopes(["idm.mcp.read"]);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var service = CreateService(repository);
+        var context = CreateContext(certificate, ["idm.mcp.read"]);
+        var service = CreateService(context: context);
 
         var response = await service.IssueClientCredentialsTokenAsync(
             "client_credentials",
-            client.ClientId,
+            context.ClientId,
             "idm.mcp.read",
             certificate,
             resource: "idm-demo-mcp");
@@ -139,16 +127,13 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_McpResourceWithoutMcpScope_ThrowsInvalidTarget()
     {
         using var certificate = CreateCertificate();
-        var client = CreateClient(certificate);
-        client.AssignScopes(["orders.read"]);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var service = CreateService(repository);
+        var context = CreateContext(certificate, ["orders.read"]);
+        var service = CreateService(context: context);
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
             service.IssueClientCredentialsTokenAsync(
                 "client_credentials",
-                client.ClientId,
+                context.ClientId,
                 "orders.read",
                 certificate,
                 resource: "idm-demo-mcp"));
@@ -161,16 +146,13 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_UnknownResource_ThrowsInvalidTarget()
     {
         using var certificate = CreateCertificate();
-        var client = CreateClient(certificate);
-        client.AssignScopes(["idm.mcp.read"]);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var service = CreateService(repository);
+        var context = CreateContext(certificate, ["idm.mcp.read"]);
+        var service = CreateService(context: context);
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
             service.IssueClientCredentialsTokenAsync(
                 "client_credentials",
-                client.ClientId,
+                context.ClientId,
                 "idm.mcp.read",
                 certificate,
                 resource: "unknown-resource"));
@@ -183,11 +165,9 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_RequireDpopWithoutProof_ThrowsInvalidDpopProof()
     {
         using var certificate = CreateCertificate();
-        var client = CreateClient(certificate);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        var context = CreateContext(certificate);
         var service = CreateService(
-            repository,
+            context: context,
             options: new AuthorizationServerOptions
             {
                 Issuer = "https://issuer.test",
@@ -197,7 +177,7 @@ public sealed class AuthorizationServerServiceTests
             });
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
-            service.IssueClientCredentialsTokenAsync("client_credentials", client.ClientId, null, certificate));
+            service.IssueClientCredentialsTokenAsync("client_credentials", context.ClientId, null, certificate));
 
         Assert.Equal("invalid_dpop_proof", exception.Error);
         Assert.Equal(400, exception.StatusCode);
@@ -207,15 +187,12 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_NoRequestedScope_GrantsAllAssignedScopes()
     {
         using var certificate = CreateCertificate();
-        var client = CreateClient(certificate);
-        client.AssignScopes(["orders.read", "orders.write"]);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var service = CreateService(repository);
+        var context = CreateContext(certificate, ["orders.read", "orders.write"]);
+        var service = CreateService(context: context);
 
         var response = await service.IssueClientCredentialsTokenAsync(
             "client_credentials",
-            client.ClientId,
+            context.ClientId,
             null,
             certificate);
 
@@ -249,7 +226,8 @@ public sealed class AuthorizationServerServiceTests
     [Fact]
     public async Task IssueClientCredentialsTokenAsync_MissingClientId_ThrowsInvalidRequest()
     {
-        var service = CreateService();
+        var service = CreateService(
+            providerException: new OAuthException("invalid_request", "client_id is required.", 400));
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
             service.IssueClientCredentialsTokenAsync("client_credentials", null, null, null));
@@ -261,7 +239,8 @@ public sealed class AuthorizationServerServiceTests
     [Fact]
     public async Task IssueClientCredentialsTokenAsync_MissingCertificate_ThrowsInvalidClient()
     {
-        var service = CreateService();
+        var service = CreateService(
+            providerException: new OAuthException("invalid_client", "Client certificate is missing or invalid.", 401));
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
             service.IssueClientCredentialsTokenAsync("client_credentials", "orders-service", null, null));
@@ -274,9 +253,8 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_UnknownClient_ThrowsInvalidClient()
     {
         using var certificate = CreateCertificate();
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync("orders-service", Arg.Any<CancellationToken>()).ReturnsNull();
-        var service = CreateService(repository);
+        var service = CreateService(
+            providerException: new OAuthException("invalid_client", "Client authentication failed.", 401));
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
             service.IssueClientCredentialsTokenAsync("client_credentials", "orders-service", null, certificate));
@@ -289,14 +267,11 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_InactiveClient_ThrowsInvalidClient()
     {
         using var certificate = CreateCertificate();
-        var client = CreateClient(certificate);
-        client.Deactivate();
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var service = CreateService(repository);
+        var service = CreateService(
+            providerException: new OAuthException("invalid_client", "Client authentication failed.", 401));
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
-            service.IssueClientCredentialsTokenAsync("client_credentials", client.ClientId, null, certificate));
+            service.IssueClientCredentialsTokenAsync("client_credentials", "orders-service", null, certificate));
 
         Assert.Equal("invalid_client", exception.Error);
         Assert.Equal(401, exception.StatusCode);
@@ -306,13 +281,11 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_UnregisteredCertificate_ThrowsInvalidClient()
     {
         using var certificate = CreateCertificate();
-        var client = MachineClient.Create("orders-service", null);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var service = CreateService(repository);
+        var service = CreateService(
+            providerException: new OAuthException("invalid_client", "Client certificate is not registered.", 401));
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
-            service.IssueClientCredentialsTokenAsync("client_credentials", client.ClientId, null, certificate));
+            service.IssueClientCredentialsTokenAsync("client_credentials", "orders-service", null, certificate));
 
         Assert.Equal("invalid_client", exception.Error);
         Assert.Equal(401, exception.StatusCode);
@@ -321,15 +294,12 @@ public sealed class AuthorizationServerServiceTests
     [Fact]
     public async Task IssueClientCredentialsTokenAsync_ThumbprintMismatch_ThrowsInvalidClient()
     {
-        using var registeredCertificate = CreateCertificate();
         using var presentedCertificate = CreateCertificate("presented-service");
-        var client = CreateClient(registeredCertificate);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var service = CreateService(repository);
+        var service = CreateService(
+            providerException: new OAuthException("invalid_client", "Client certificate does not match registration.", 401));
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
-            service.IssueClientCredentialsTokenAsync("client_credentials", client.ClientId, null, presentedCertificate));
+            service.IssueClientCredentialsTokenAsync("client_credentials", "orders-service", null, presentedCertificate));
 
         Assert.Equal("invalid_client", exception.Error);
         Assert.Equal(401, exception.StatusCode);
@@ -339,14 +309,11 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_UnassignedScope_ThrowsInvalidScope()
     {
         using var certificate = CreateCertificate();
-        var client = CreateClient(certificate);
-        client.AssignScopes(["orders.read"]);
-        var repository = Substitute.For<IMachineClientRepository>();
-        repository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var service = CreateService(repository);
+        var context = CreateContext(certificate, ["orders.read"]);
+        var service = CreateService(context: context);
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
-            service.IssueClientCredentialsTokenAsync("client_credentials", client.ClientId, "orders.write", certificate));
+            service.IssueClientCredentialsTokenAsync("client_credentials", context.ClientId, "orders.write", certificate));
 
         Assert.Equal("invalid_scope", exception.Error);
         Assert.Equal(400, exception.StatusCode);
@@ -356,19 +323,12 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_RegisteredCertificateRecord_ReturnsJwt()
     {
         using var certificate = CreateCertificate();
-        var client = MachineClient.Create("orders-service", "Orders Service");
-        client.AssignScopes(["orders.read"]);
-        var clientRepository = Substitute.For<IMachineClientRepository>();
-        clientRepository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var certificateRepository = Substitute.For<IMachineClientCertificateRepository>();
-        certificateRepository
-            .GetByThumbprintAsync(client.Id, ComputeThumbprint(certificate), Arg.Any<CancellationToken>())
-            .Returns(CreateCertificateRecord(client, certificate));
-        var service = CreateService(clientRepository, certificateRepository);
+        var context = CreateContext(certificate, ["orders.read"]);
+        var service = CreateService(context: context);
 
         var response = await service.IssueClientCredentialsTokenAsync(
             "client_credentials",
-            client.ClientId,
+            context.ClientId,
             "orders.read",
             certificate);
 
@@ -380,35 +340,36 @@ public sealed class AuthorizationServerServiceTests
     public async Task IssueClientCredentialsTokenAsync_RevokedCertificateRecord_ThrowsInvalidClient()
     {
         using var certificate = CreateCertificate();
-        var client = MachineClient.Create("orders-service", "Orders Service");
-        var certificateRecord = CreateCertificateRecord(client, certificate);
-        certificateRecord.Revoke("rotated");
-        var clientRepository = Substitute.For<IMachineClientRepository>();
-        clientRepository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
-        var certificateRepository = Substitute.For<IMachineClientCertificateRepository>();
-        certificateRepository
-            .GetByThumbprintAsync(client.Id, ComputeThumbprint(certificate), Arg.Any<CancellationToken>())
-            .Returns(certificateRecord);
-        var service = CreateService(clientRepository, certificateRepository);
+        var service = CreateService(
+            providerException: new OAuthException("invalid_client", "Client certificate is revoked.", 401));
 
         var exception = await Assert.ThrowsAsync<OAuthException>(() =>
-            service.IssueClientCredentialsTokenAsync("client_credentials", client.ClientId, null, certificate));
+            service.IssueClientCredentialsTokenAsync("client_credentials", "orders-service", null, certificate));
 
         Assert.Equal("invalid_client", exception.Error);
         Assert.Equal(401, exception.StatusCode);
     }
 
     private static AuthorizationServerService CreateService(
-        IMachineClientRepository? repository = null,
-        IMachineClientCertificateRepository? certificateRepository = null,
+        IIssuanceContextProvider? issuanceContextProvider = null,
+        IssuanceContext? context = null,
+        OAuthException? providerException = null,
         IDpopProofValidator? dpopProofValidator = null,
         AuthorizationServerOptions? options = null)
     {
-        var roleRepository = Substitute.For<IGlobalRoleRepository>();
-        roleRepository.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
-
-        var scopeRepository = Substitute.For<IGlobalScopeRepository>();
-        scopeRepository.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+        issuanceContextProvider ??= Substitute.For<IIssuanceContextProvider>();
+        if (providerException is not null)
+        {
+            issuanceContextProvider
+                .ResolveAsync(Arg.Any<string?>(), Arg.Any<X509Certificate2?>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromException<IssuanceContext>(providerException));
+        }
+        else if (context is not null)
+        {
+            issuanceContextProvider
+                .ResolveAsync(Arg.Any<string?>(), Arg.Any<X509Certificate2?>(), Arg.Any<CancellationToken>())
+                .Returns(context);
+        }
 
         return new AuthorizationServerService(
             options ?? new AuthorizationServerOptions
@@ -418,39 +379,23 @@ public sealed class AuthorizationServerServiceTests
                 AccessTokenLifetimeSeconds = 3600,
                 RequireDpop = false,
             },
-            repository ?? Substitute.For<IMachineClientRepository>(),
-            certificateRepository ?? Substitute.For<IMachineClientCertificateRepository>(),
-            roleRepository,
-            scopeRepository,
+            issuanceContextProvider,
             new TestSigningKeyStore(),
             dpopProofValidator ?? Substitute.For<IDpopProofValidator>(),
             Substitute.For<ILogger<AuthorizationServerService>>());
     }
 
-    private static MachineClient CreateClient(X509Certificate2 certificate)
+    private static IssuanceContext CreateContext(
+        X509Certificate2 certificate,
+        IReadOnlyList<string>? activeScopes = null,
+        IReadOnlyList<string>? activeRoles = null)
     {
-        var client = MachineClient.Create("orders-service", "Orders Service");
-        client.UpdateCertificate(Convert.ToHexString(SHA256.HashData(certificate.RawData)), certificate.Subject, certificate.NotAfter);
-        return client;
-    }
-
-    private static MachineClientCertificate CreateCertificateRecord(MachineClient client, X509Certificate2 certificate)
-    {
-        return MachineClientCertificate.Create(
-            client.Id,
-            "test certificate",
-            ComputeThumbprint(certificate),
-            certificate.Subject,
-            certificate.Issuer,
-            certificate.SerialNumber,
-            certificate.NotBefore,
-            certificate.NotAfter,
-            certificate.ExportCertificatePem());
-    }
-
-    private static string ComputeThumbprint(X509Certificate2 certificate)
-    {
-        return Convert.ToHexString(SHA256.HashData(certificate.RawData));
+        return new IssuanceContext(
+            Guid.NewGuid(),
+            "orders-service",
+            certificate,
+            activeScopes ?? [],
+            activeRoles ?? []);
     }
 
     private static X509Certificate2 CreateCertificate(string subjectName = "orders-service")

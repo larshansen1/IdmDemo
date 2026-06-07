@@ -4,9 +4,8 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
+using Backend.As.Domain;
 using Backend.As.Domain.Services;
-using Backend.Idp.Domain.Entities;
-using Backend.Idp.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 
 namespace Backend.Application.Services;
@@ -14,33 +13,23 @@ namespace Backend.Application.Services;
 public sealed partial class AuthorizationServerService : IAuthorizationServerService
 {
     private const int _badRequestStatusCode = 400;
-    private const int _unauthorizedStatusCode = 401;
 
     private readonly AuthorizationServerOptions _options;
-    private readonly IMachineClientRepository _clientRepository;
-    private readonly IMachineClientCertificateRepository _certificateRepository;
-    private readonly IGlobalRoleRepository _roleRepository;
-    private readonly IGlobalScopeRepository _scopeRepository;
+    private readonly IIssuanceContextProvider _issuanceContextProvider;
     private readonly IJwtSigningKeyStore _signingKeyStore;
     private readonly IDpopProofValidator _dpopProofValidator;
     private readonly ILogger<AuthorizationServerService> _logger;
 
     public AuthorizationServerService(
         AuthorizationServerOptions options,
-        IMachineClientRepository clientRepository,
-        IMachineClientCertificateRepository certificateRepository,
-        IGlobalRoleRepository roleRepository,
-        IGlobalScopeRepository scopeRepository,
+        IIssuanceContextProvider issuanceContextProvider,
         IJwtSigningKeyStore signingKeyStore,
         IDpopProofValidator dpopProofValidator,
         ILogger<AuthorizationServerService> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         this._options = options;
-        this._clientRepository = clientRepository;
-        this._certificateRepository = certificateRepository;
-        this._roleRepository = roleRepository;
-        this._scopeRepository = scopeRepository;
+        this._issuanceContextProvider = issuanceContextProvider;
         this._signingKeyStore = signingKeyStore;
         this._dpopProofValidator = dpopProofValidator;
         this._logger = logger;
@@ -87,22 +76,20 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         CancellationToken cancellationToken = default)
     {
         ValidateGrantType(grantType);
-        var client = await this.AuthenticateClientAsync(clientId, clientCertificate, cancellationToken).ConfigureAwait(false);
         var dpopProof = await this.ValidateDpopProofAsync(dpopProofJwt, cancellationToken).ConfigureAwait(false);
-        var activeAssignedScopes = await this.ResolveActiveAssignedScopesAsync(client, cancellationToken).ConfigureAwait(false);
-        var activeAssignedRoles = await this.ResolveActiveAssignedRolesAsync(client, cancellationToken).ConfigureAwait(false);
-        var grantedScopes = ResolveGrantedScopes(scope, activeAssignedScopes);
-        var audience = this.ResolveAudience(resource, activeAssignedScopes);
+        var context = await this._issuanceContextProvider
+            .ResolveAsync(clientId, clientCertificate, cancellationToken)
+            .ConfigureAwait(false);
+        var grantedScopes = ResolveGrantedScopes(scope, context.ActiveScopes);
+        var audience = this.ResolveAudience(resource, context.ActiveScopes);
         var token = await this.CreateJwtAsync(
-            client,
-            clientCertificate!,
+            context,
             audience,
             grantedScopes,
-            activeAssignedRoles,
             dpopProof?.JwkThumbprint,
             cancellationToken).ConfigureAwait(false);
 
-        LogTokenIssued(this._logger, client.Id, client.ClientId);
+        LogTokenIssued(this._logger, context.ClientRecordId, context.ClientId);
 
         return new TokenResponse
         {
@@ -122,11 +109,6 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             .TrimEnd('=')
             .Replace("+", "-", StringComparison.Ordinal)
             .Replace("/", "_", StringComparison.Ordinal);
-    }
-
-    private static string ComputeCertificateThumbprintHex(X509Certificate2 certificate)
-    {
-        return Convert.ToHexString(SHA256.HashData(certificate.RawData));
     }
 
     private static string ComputeCertificateThumbprintBase64Url(X509Certificate2 certificate)
@@ -169,43 +151,6 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         }
     }
 
-    private static void ValidateClientCertificate(MachineClient client, X509Certificate2 certificate)
-    {
-        if (string.IsNullOrWhiteSpace(client.CertificateThumbprintSha256))
-        {
-            throw new OAuthException("invalid_client", "Client certificate is not registered.", _unauthorizedStatusCode);
-        }
-
-        if (DateTimeOffset.UtcNow > certificate.NotAfter)
-        {
-            throw new OAuthException("invalid_client", "Client certificate is expired.", _unauthorizedStatusCode);
-        }
-
-        if (client.CertificateExpiresAt is not null && DateTimeOffset.UtcNow > client.CertificateExpiresAt)
-        {
-            throw new OAuthException("invalid_client", "Registered client certificate is expired.", _unauthorizedStatusCode);
-        }
-
-        var actualThumbprint = ComputeCertificateThumbprintHex(certificate);
-        if (!string.Equals(actualThumbprint, client.CertificateThumbprintSha256, StringComparison.Ordinal))
-        {
-            throw new OAuthException("invalid_client", "Client certificate does not match registration.", _unauthorizedStatusCode);
-        }
-    }
-
-    private static void ValidateRegisteredCertificate(MachineClientCertificate certificate)
-    {
-        if (certificate.Status == MachineClientCertificateStatus.Revoked)
-        {
-            throw new OAuthException("invalid_client", "Client certificate is revoked.", _unauthorizedStatusCode);
-        }
-
-        if (!certificate.IsUsableAt(DateTimeOffset.UtcNow))
-        {
-            throw new OAuthException("invalid_client", "Client certificate is expired.", _unauthorizedStatusCode);
-        }
-    }
-
     private static string CreateEncodedHeader(JwtSigningKey key)
     {
         var header = new Dictionary<string, object>
@@ -220,11 +165,9 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
 
     private static string CreateEncodedPayload(
         AuthorizationServerOptions options,
-        MachineClient client,
-        X509Certificate2 certificate,
+        IssuanceContext context,
         string audience,
         IReadOnlyList<string> grantedScopes,
-        IReadOnlyList<string> activeAssignedRoles,
         string? dpopJwkThumbprint,
         DateTimeOffset now,
         DateTimeOffset expiresAt)
@@ -232,7 +175,7 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         var confirmation = string.IsNullOrWhiteSpace(dpopJwkThumbprint)
             ? new Dictionary<string, object>
             {
-                ["x5t#S256"] = ComputeCertificateThumbprintBase64Url(certificate),
+                ["x5t#S256"] = ComputeCertificateThumbprintBase64Url(context.Certificate),
             }
             : new Dictionary<string, object>
             {
@@ -242,15 +185,15 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         var payload = new Dictionary<string, object>
         {
             ["iss"] = options.Issuer,
-            ["sub"] = client.Id.ToString(),
-            ["client_id"] = client.ClientId,
+            ["sub"] = context.ClientRecordId.ToString(),
+            ["client_id"] = context.ClientId,
             ["aud"] = audience,
             ["jti"] = Guid.NewGuid().ToString(),
             ["iat"] = now.ToUnixTimeSeconds(),
             ["nbf"] = now.ToUnixTimeSeconds(),
             ["exp"] = expiresAt.ToUnixTimeSeconds(),
             ["scope"] = string.Join(' ', grantedScopes),
-            ["roles"] = activeAssignedRoles,
+            ["roles"] = context.ActiveRoles,
             ["cnf"] = confirmation,
         };
 
@@ -267,50 +210,6 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
             RSASignaturePadding.Pkcs1);
 
         return Base64UrlEncode(signature);
-    }
-
-    private async Task<MachineClient> AuthenticateClientAsync(
-        string? clientId,
-        X509Certificate2? clientCertificate,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(clientId))
-        {
-            throw new OAuthException("invalid_request", "client_id is required.", _badRequestStatusCode);
-        }
-
-        if (clientCertificate is null)
-        {
-            throw new OAuthException("invalid_client", "Client certificate is missing or invalid.", _unauthorizedStatusCode);
-        }
-
-        var client = await this._clientRepository.GetByClientIdAsync(clientId, cancellationToken).ConfigureAwait(false);
-        if (client is null || !client.Active)
-        {
-            throw new OAuthException("invalid_client", "Client authentication failed.", _unauthorizedStatusCode);
-        }
-
-        await this.ValidateClientCertificateAsync(client, clientCertificate, cancellationToken).ConfigureAwait(false);
-        return client;
-    }
-
-    private async Task ValidateClientCertificateAsync(
-        MachineClient client,
-        X509Certificate2 clientCertificate,
-        CancellationToken cancellationToken)
-    {
-        var actualThumbprint = ComputeCertificateThumbprintHex(clientCertificate);
-        var registeredCertificate = await this._certificateRepository
-            .GetByThumbprintAsync(client.Id, actualThumbprint, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (registeredCertificate is not null)
-        {
-            ValidateRegisteredCertificate(registeredCertificate);
-            return;
-        }
-
-        ValidateClientCertificate(client, clientCertificate);
     }
 
     private async Task<ValidatedDpopProof?> ValidateDpopProofAsync(
@@ -359,11 +258,9 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
     }
 
     private async Task<string> CreateJwtAsync(
-        MachineClient client,
-        X509Certificate2 certificate,
+        IssuanceContext context,
         string audience,
         IReadOnlyList<string> grantedScopes,
-        IReadOnlyList<string> activeAssignedRoles,
         string? dpopJwkThumbprint,
         CancellationToken cancellationToken)
     {
@@ -373,11 +270,9 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         var encodedHeader = CreateEncodedHeader(key);
         var encodedPayload = CreateEncodedPayload(
             this._options,
-            client,
-            certificate,
+            context,
             audience,
             grantedScopes,
-            activeAssignedRoles,
             dpopJwkThumbprint,
             now,
             expiresAt);
@@ -387,37 +282,5 @@ public sealed partial class AuthorizationServerService : IAuthorizationServerSer
         var signature = Sign(signingInput, key);
 
         return string.Create(CultureInfo.InvariantCulture, $"{signingInput}.{signature}");
-    }
-
-    private async Task<IReadOnlyList<string>> ResolveActiveAssignedScopesAsync(
-        MachineClient client,
-        CancellationToken cancellationToken)
-    {
-        var activeScopes = new List<string>();
-        foreach (var scopeValue in client.GetAssignedScopes())
-        {
-            if (await this._scopeRepository.ExistsActiveByValueAsync(scopeValue, cancellationToken).ConfigureAwait(false))
-            {
-                activeScopes.Add(scopeValue);
-            }
-        }
-
-        return activeScopes;
-    }
-
-    private async Task<IReadOnlyList<string>> ResolveActiveAssignedRolesAsync(
-        MachineClient client,
-        CancellationToken cancellationToken)
-    {
-        var activeRoles = new List<string>();
-        foreach (var roleValue in client.GetAssignedRoles())
-        {
-            if (await this._roleRepository.ExistsActiveByValueAsync(roleValue, cancellationToken).ConfigureAwait(false))
-            {
-                activeRoles.Add(roleValue);
-            }
-        }
-
-        return activeRoles;
     }
 }
