@@ -8,7 +8,7 @@ namespace Backend.Mcp.Api;
 public sealed class IdmApiTokenProvider : IIdmApiTokenProvider
 {
     private static readonly SemaphoreSlim _lock = new(1, 1);
-    private static readonly Dictionary<string, (string Token, DateTimeOffset Expiry)> _cache = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, (BoundToken Token, DateTimeOffset Expiry)> _cache = new(StringComparer.Ordinal);
 
     private readonly IIdmApiInstanceResolver _instanceResolver;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -21,7 +21,7 @@ public sealed class IdmApiTokenProvider : IIdmApiTokenProvider
         this._httpClientFactory = httpClientFactory;
     }
 
-    public async Task<string> GetAccessTokenAsync(string instanceName, CancellationToken cancellationToken = default)
+    public async Task<BoundToken> GetBoundTokenAsync(string instanceName, CancellationToken cancellationToken = default)
     {
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -53,7 +53,7 @@ public sealed class IdmApiTokenProvider : IIdmApiTokenProvider
         }
     }
 
-    private async Task<string> AcquireTokenAsync(string instanceName, CancellationToken cancellationToken)
+    private async Task<BoundToken> AcquireTokenAsync(string instanceName, CancellationToken cancellationToken)
     {
         var resolved = this._instanceResolver.Resolve(instanceName);
 
@@ -61,8 +61,14 @@ public sealed class IdmApiTokenProvider : IIdmApiTokenProvider
         using var httpClient = this._httpClientFactory.CreateClient("idm-token");
         var tokenUri = new Uri(resolved.BaseUrl, "connect/token");
 
+#pragma warning disable CA2000 // dpopKey is owned by BoundToken stored in the cache; disposal is managed by cache eviction
+        var dpopKey = RSA.Create(2048);
+#pragma warning restore CA2000
+        var dpopProof = DpopProofFactory.Create(dpopKey, "POST", tokenUri);
+
         using var request = new HttpRequestMessage(HttpMethod.Post, tokenUri);
         request.Headers.Add("X-Client-Cert", Convert.ToBase64String(cert.RawData));
+        request.Headers.Add("DPoP", dpopProof);
         request.Content = new FormUrlEncodedContent(
         [
             KeyValuePair.Create("grant_type", "client_credentials"),
@@ -77,8 +83,9 @@ public sealed class IdmApiTokenProvider : IIdmApiTokenProvider
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("Token endpoint returned an empty response.");
 
+        var token = new BoundToken(tokenResponse.AccessToken, dpopKey);
         var expiry = DateTimeOffset.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
-        _cache[instanceName] = (tokenResponse.AccessToken, expiry);
-        return tokenResponse.AccessToken;
+        _cache[instanceName] = (token, expiry);
+        return token;
     }
 }

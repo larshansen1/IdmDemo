@@ -2,5 +2,5 @@ namespace Backend.Mcp.Api;
 
 public interface IIdmApiTokenProvider
 {
-    Task<string> GetAccessTokenAsync(string instanceName, CancellationToken cancellationToken = default);
+    Task<BoundToken> GetBoundTokenAsync(string instanceName, CancellationToken cancellationToken = default);
 }

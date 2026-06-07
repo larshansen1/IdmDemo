@@ -21,7 +21,7 @@ include lifecycle operations for users, clients, roles, scopes, certificate
 issuance, external certificate registration, and certificate revocation.
 
 Administrative API routes are private/internal in the deployed architecture.
-They require an IdmDemo-issued bearer token with the `scim.admin` role. The
+They require an IdmDemo-issued DPoP-bound token with the `scim.admin` role. The
 admin machine client is seeded for deployment and is used by trusted internal
 callers such as the hosted MCP Resource Server.
 
