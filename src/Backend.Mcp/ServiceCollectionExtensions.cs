@@ -1,7 +1,6 @@
 using Backend.Application.Models.Auth;
 using Backend.Application.Services;
 using Backend.As.Domain.Services;
-using Backend.Infrastructure.Signing;
 using Backend.Mcp.Api;
 using Backend.Mcp.Audit;
 using Backend.Mcp.Health;
@@ -35,15 +34,13 @@ public static class ServiceCollectionExtensions
             .Get<McpRuntimeOptions>() ?? new McpRuntimeOptions();
         var effectiveSettings = McpRuntimeProfileResolver.Resolve(runtimeOptions);
         var authorizationServerOptions = CreateAuthorizationServerOptions(configuration, effectiveSettings);
-        var signingKeyPath = configuration?["AuthorizationServer:SigningKeyPath"]
-            ?? Path.Combine(AppContext.BaseDirectory, "signing-key.json");
 
         services.AddHttpContextAccessor();
         services.AddHttpClient<IIdmApiClient, IdmApiClient>();
         services.AddHttpClient("idm-token");
         services.AddSingleton<IIdmApiTokenProvider, IdmApiTokenProvider>();
         services.AddSingleton(authorizationServerOptions);
-        services.AddSingleton<IJwtSigningKeyStore>(_ => new LocalJwtSigningKeyStore(signingKeyPath));
+        services.AddSingleton<IJwtSigningKeyStore, JwksJwtSigningKeyStore>();
         services.AddSingleton<IDpopReplayCache, InMemoryDpopReplayCache>();
         services.AddScoped<IDpopProofValidator, DpopProofValidator>();
         services.AddScoped<IAccessTokenValidator, AccessTokenValidator>();
