@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Backend.As.Domain</RootNamespace>
+    <AssemblyName>Backend.As.Domain</AssemblyName>
+    <!-- CA1716: 'As' is a reserved VB keyword; the name is intentional for the Authorization Server domain -->
+    <NoWarn>$(NoWarn);CA1716</NoWarn>
+  </PropertyGroup>
+
+</Project>

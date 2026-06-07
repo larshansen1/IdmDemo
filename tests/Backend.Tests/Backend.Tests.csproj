@@ -25,7 +25,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Backend.Application\Backend.Application.csproj" />
-    <ProjectReference Include="..\..\src\Backend.Domain\Backend.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Backend.Idp.Domain\Backend.Idp.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Backend.As.Domain\Backend.As.Domain.csproj" />
     <ProjectReference Include="..\..\src\Backend.Mcp\Backend.Mcp.csproj" />
   </ItemGroup>
 

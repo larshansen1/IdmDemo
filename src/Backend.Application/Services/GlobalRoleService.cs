@@ -2,9 +2,9 @@ using System.Text.Json;
 using Backend.Application.Models.Roles;
 using Backend.Application.Models.Scim;
 using Backend.Application.Scim;
-using Backend.Domain.Entities;
-using Backend.Domain.Exceptions;
-using Backend.Domain.Repositories;
+using Backend.Idp.Domain.Entities;
+using Backend.Idp.Domain.Exceptions;
+using Backend.Idp.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 
 namespace Backend.Application.Services;

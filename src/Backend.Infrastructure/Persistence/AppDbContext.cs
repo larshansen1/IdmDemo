@@ -1,4 +1,4 @@
-using Backend.Domain.Entities;
+using Backend.Idp.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend.Infrastructure.Persistence;

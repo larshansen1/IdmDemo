@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <RootNamespace>Backend.Domain</RootNamespace>
-    <AssemblyName>Backend.Domain</AssemblyName>
+    <RootNamespace>Backend.Idp.Domain</RootNamespace>
+    <AssemblyName>Backend.Idp.Domain</AssemblyName>
   </PropertyGroup>
 
 </Project>

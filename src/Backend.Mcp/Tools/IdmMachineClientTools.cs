@@ -3,7 +3,7 @@ using Backend.Application.Models.Certificates;
 using Backend.Application.Models.Clients;
 using Backend.Application.Models.Scim;
 using Backend.Application.Scim;
-using Backend.Domain.Exceptions;
+using Backend.Idp.Domain.Exceptions;
 using Backend.Mcp.Api;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;

@@ -4,9 +4,9 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
-using Backend.Domain.Entities;
-using Backend.Domain.Repositories;
-using Backend.Domain.Services;
+using Backend.As.Domain.Services;
+using Backend.Idp.Domain.Entities;
+using Backend.Idp.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 
 namespace Backend.Application.Services;

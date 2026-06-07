@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace Backend.Domain.Exceptions;
+namespace Backend.Idp.Domain.Exceptions;
 
 [ExcludeFromCodeCoverage]
 public sealed class NotFoundException : Exception
