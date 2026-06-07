@@ -68,7 +68,7 @@ the public `auth.idp.madmetal.org` nginx server block.
 
 Administrative API calls require:
 
-- `Authorization: Bearer <token>`
+- `Authorization: DPoP <token>` with a matching `DPoP` proof header
 - token role `scim.admin`
 
 The `scim.admin` role and the configured admin machine client are seeded by
@@ -93,7 +93,7 @@ certificate metadata and thumbprint.
 | `auth.idp.madmetal.org` | `/scim/v2/*` | Not public | Returns nginx `404` publicly |
 | `mcp.idp.madmetal.org` | `/mcp` | Public | DPoP access token |
 | `mcp.idp.madmetal.org` | `/health/live`, `/health/ready` | Private/ops only | nginx allows localhost only |
-| `127.0.0.1:5000` on deploy host | API admin routes | Private | `scim.admin` bearer token |
+| `127.0.0.1:5000` on deploy host | API admin routes | Private | `scim.admin` DPoP token |
 | `127.0.0.1:5100` on deploy host | MCP health/routes | Private | Profile-dependent |
 
 ## Token Flow

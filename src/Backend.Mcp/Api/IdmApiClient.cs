@@ -308,11 +308,14 @@ public sealed class IdmApiClient : IIdmApiClient
     {
         var resolved = this._instanceResolver.Resolve(instanceName);
         var correlationId = Guid.NewGuid().ToString("D", CultureInfo.InvariantCulture);
-        var token = await this._tokenProvider.GetAccessTokenAsync(resolved.Name, cancellationToken).ConfigureAwait(false);
+        var bound = await this._tokenProvider.GetBoundTokenAsync(resolved.Name, cancellationToken).ConfigureAwait(false);
 
         var uri = new Uri(resolved.BaseUrl, relativePath);
+        var dpopProof = DpopProofFactory.Create(bound.DpopKey, method.Method, uri, bound.AccessToken);
+
         var request = new HttpRequestMessage(method, uri);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("DPoP", bound.AccessToken);
+        request.Headers.Add("DPoP", dpopProof);
         request.Headers.Add("X-Correlation-Id", correlationId);
         request.Headers.Accept.ParseAdd("application/json");
         return (request, resolved.Name, correlationId);

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
 using Backend.Application.Models.Certificates;
@@ -129,7 +130,7 @@ public sealed class IdmApiClientTests
     }
 
     [Fact]
-    public async Task GetClientAsync_ExplicitInstance_SendsBearerTokenAndCorrelationId()
+    public async Task GetClientAsync_ExplicitInstance_SendsDpopTokenAndCorrelationId()
     {
         var clientId = Guid.NewGuid();
         using var handler = new CapturingHandler(new ClientResponse
@@ -147,7 +148,8 @@ public sealed class IdmApiClientTests
         Assert.Equal(HttpMethod.Get, handler.Request!.Method);
         Assert.Equal(new Uri($"https://localhost:5003/scim/v2/Clients/{clientId:D}"), handler.Request.RequestUri);
         Assert.True(handler.Request.Headers.Contains("X-Correlation-Id"));
-        Assert.Equal("Bearer test-bearer-token", handler.Request.Headers.Authorization?.ToString());
+        Assert.True(handler.Request.Headers.Contains("DPoP"));
+        Assert.Equal("DPoP test-bearer-token", handler.Request.Headers.Authorization?.ToString());
     }
 
     [Fact]
@@ -289,9 +291,11 @@ public sealed class IdmApiClientTests
             Options.Create(new McpRuntimeOptions { DefaultInstance = "local" }));
 
         var tokenProvider = Substitute.For<IIdmApiTokenProvider>();
+#pragma warning disable CA2000
         tokenProvider
-            .GetAccessTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns("test-bearer-token");
+            .GetBoundTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BoundToken("test-bearer-token", RSA.Create(2048)));
+#pragma warning restore CA2000
 
 #pragma warning disable CA2000
         var httpClient = new HttpClient(handler, false);
