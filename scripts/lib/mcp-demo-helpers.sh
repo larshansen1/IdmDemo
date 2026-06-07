@@ -290,7 +290,7 @@ acquire_admin_token() {
 
     local cert_b64 dpop_proof body
     cert_b64=$(openssl x509 -in "$ADMIN_CERT_PATH" -outform DER | base64 | tr -d '\n')
-    dpop_proof=$(create_dpop_proof POST "$AUTH/connect/token" "$WORKDIR/admin-dpop.key")
+    dpop_proof=$(create_dpop_proof POST "$AUTH_DPOP/connect/token" "$WORKDIR/admin-dpop.key")
 
     body=$(curl -sS -X POST "$AUTH/connect/token" \
         -H "X-Client-Cert: $cert_b64" \
