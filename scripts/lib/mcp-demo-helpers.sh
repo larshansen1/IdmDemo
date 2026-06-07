@@ -283,19 +283,18 @@ acquire_admin_token() {
         exit 1
     fi
 
-    local cert_b64
-    cert_b64=$(openssl x509 -in "$ADMIN_CERT_PATH" -outform DER | base64 | tr -d '\n')
+    openssl genpkey \
+        -algorithm RSA \
+        -pkeyopt rsa_keygen_bits:2048 \
+        -out "$WORKDIR/admin-dpop.key" >/dev/null 2>&1
 
-    local status body
-    body=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$AUTH/connect/token" \
-        -H "X-Client-Cert: $cert_b64" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        --data-urlencode "grant_type=client_credentials" \
-        --data-urlencode "client_id=$ADMIN_CLIENT_ID" 2>&1) || true
-    status="$body"
+    local cert_b64 dpop_proof body
+    cert_b64=$(openssl x509 -in "$ADMIN_CERT_PATH" -outform DER | base64 | tr -d '\n')
+    dpop_proof=$(create_dpop_proof POST "$AUTH/connect/token" "$WORKDIR/admin-dpop.key")
 
     body=$(curl -sS -X POST "$AUTH/connect/token" \
         -H "X-Client-Cert: $cert_b64" \
+        -H "DPoP: $dpop_proof" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         --data-urlencode "grant_type=client_credentials" \
         --data-urlencode "client_id=$ADMIN_CLIENT_ID")
@@ -307,6 +306,19 @@ acquire_admin_token() {
         echo "  Response: $body" >&2
         exit 1
     fi
+}
+
+# Populate a nameref array with the Authorization + DPoP headers needed for an
+# admin SCIM call.  Usage:
+#   local args=()
+#   admin_auth_args args GET "$API/scim/v2/Clients"
+#   do_request "label" GET "$url" "${args[@]}"
+admin_auth_args() {
+    local -n _admin_ref="$1"
+    local method="$2" url="$3"
+    local proof
+    proof=$(create_dpop_proof "$method" "$url" "$WORKDIR/admin-dpop.key" "$ADMIN_TOKEN")
+    _admin_ref=(-H "Authorization: DPoP $ADMIN_TOKEN" -H "DPoP: $proof")
 }
 
 generate_client_certificate() {
@@ -331,9 +343,11 @@ generate_client_certificate() {
 
 ensure_scope() {
     local scope="$1"
+    local auth_args=()
+    admin_auth_args auth_args POST "$API/scim/v2/Scopes"
 
     do_request "Create scope $scope" POST "$API/scim/v2/Scopes" \
-        -H "Authorization: Bearer $ADMIN_TOKEN" \
+        "${auth_args[@]}" \
         -H "Content-Type: application/scim+json" \
         -d "{\"value\":\"$scope\",\"displayName\":\"$scope\",\"active\":true}"
 

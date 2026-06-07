@@ -97,7 +97,7 @@ SMOKE_CERT_EXPIRES_AT=$(openssl x509 -in "$SMOKE_CERT_PATH" -noout -enddate \
 
 header "Admin token"
 acquire_admin_token
-echo "  OK   Acquired scim.admin bearer token for '$ADMIN_CLIENT_ID'"
+echo "  OK   Acquired scim.admin DPoP token for '$ADMIN_CLIENT_ID'"
 echo ""
 
 header "Scope setup"
@@ -111,8 +111,10 @@ import urllib.parse
 print(urllib.parse.quote(f'clientId eq "{sys.argv[1]}"', safe=""))
 PY
 )
-do_request "Find smoke client" GET "$API/scim/v2/Clients?filter=$FILTER" \
-    -H "Authorization: Bearer $ADMIN_TOKEN"
+FIND_URL="$API/scim/v2/Clients?filter=$FILTER"
+find_auth_args=()
+admin_auth_args find_auth_args GET "$FIND_URL"
+do_request "Find smoke client" GET "$FIND_URL" "${find_auth_args[@]}"
 check "GET /scim/v2/Clients?filter=clientId -> 200" 200 "$_STATUS" "$_BODY"
 
 CLIENT_RECORD_ID=$(echo "$_BODY" | python3 -c 'import json,sys; data=json.load(sys.stdin); resources=data.get("resources", []); print(resources[0].get("id", "") if resources else "")' 2>/dev/null || true)
@@ -134,14 +136,20 @@ PY
 )
 
 if [ -n "$CLIENT_RECORD_ID" ]; then
-    do_request "Update smoke client" PUT "$API/scim/v2/Clients/$CLIENT_RECORD_ID" \
-        -H "Authorization: Bearer $ADMIN_TOKEN" \
+    update_url="$API/scim/v2/Clients/$CLIENT_RECORD_ID"
+    update_auth_args=()
+    admin_auth_args update_auth_args PUT "$update_url"
+    do_request "Update smoke client" PUT "$update_url" \
+        "${update_auth_args[@]}" \
         -H "Content-Type: application/scim+json" \
         -d "$CLIENT_PAYLOAD"
     check "PUT /scim/v2/Clients/{id} -> 200" 200 "$_STATUS" "$_BODY"
 else
-    do_request "Create smoke client" POST "$API/scim/v2/Clients" \
-        -H "Authorization: Bearer $ADMIN_TOKEN" \
+    create_url="$API/scim/v2/Clients"
+    create_auth_args=()
+    admin_auth_args create_auth_args POST "$create_url"
+    do_request "Create smoke client" POST "$create_url" \
+        "${create_auth_args[@]}" \
         -H "Content-Type: application/scim+json" \
         -d "$CLIENT_PAYLOAD"
     check "POST /scim/v2/Clients -> 201" 201 "$_STATUS" "$_BODY"
