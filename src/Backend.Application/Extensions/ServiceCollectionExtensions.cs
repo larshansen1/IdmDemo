@@ -1,5 +1,6 @@
 using Backend.Application.Models.Auth;
 using Backend.Application.Services;
+using Backend.As.Domain;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -19,6 +20,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDpopProofValidator, DpopProofValidator>();
         services.AddScoped<IAccessTokenValidator, AccessTokenValidator>();
         services.AddScoped<IDpopBoundAccessTokenValidator, DpopBoundAccessTokenValidator>();
+        services.AddScoped<IIssuanceContextProvider, IdpIssuanceContextProvider>();
         services.AddScoped<IAuthorizationServerService, AuthorizationServerService>();
 
         return services;
@@ -40,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDpopProofValidator, DpopProofValidator>();
         services.AddScoped<IAccessTokenValidator, AccessTokenValidator>();
         services.AddScoped<IDpopBoundAccessTokenValidator, DpopBoundAccessTokenValidator>();
+        services.AddScoped<IIssuanceContextProvider, IdpIssuanceContextProvider>();
         services.AddScoped<IAuthorizationServerService, AuthorizationServerService>();
 
         return services;

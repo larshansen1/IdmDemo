@@ -4,9 +4,8 @@ using System.Text;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
 using Backend.Application.Services;
+using Backend.As.Domain;
 using Backend.As.Domain.Services;
-using Backend.Idp.Domain.Entities;
-using Backend.Idp.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
@@ -91,24 +90,16 @@ public sealed class DpopBoundAccessTokenValidatorTests
         var dpopProofValidator = new DpopProofValidator(options, new InMemoryDpopReplayCache());
         var accessTokenValidator = new AccessTokenValidator(options, signingKeyStore);
         var boundValidator = new DpopBoundAccessTokenValidator(accessTokenValidator, dpopProofValidator);
-        var clientRepository = Substitute.For<IMachineClientRepository>();
-        var certificateRepository = Substitute.For<IMachineClientCertificateRepository>();
-        var roleRepository = Substitute.For<IGlobalRoleRepository>();
-        roleRepository.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
-        var scopeRepository = Substitute.For<IGlobalScopeRepository>();
-        scopeRepository.ExistsActiveByValueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+        var issuanceContextProvider = Substitute.For<IIssuanceContextProvider>();
         var authorizationServer = new AuthorizationServerService(
             options,
-            clientRepository,
-            certificateRepository,
-            roleRepository,
-            scopeRepository,
+            issuanceContextProvider,
             signingKeyStore,
             dpopProofValidator,
             Substitute.For<ILogger<AuthorizationServerService>>());
 
         return new TestFixture(
-            clientRepository,
+            issuanceContextProvider,
             authorizationServer,
             accessTokenValidator,
             signingKeyStore,
@@ -117,13 +108,14 @@ public sealed class DpopBoundAccessTokenValidatorTests
 
     private static async Task<string> IssueDpopTokenAsync(TestFixture fixture, X509Certificate2 clientCertificate, RSA dpopKey)
     {
-        var client = MachineClient.Create("orders-service", "Orders Service");
-        client.AssignScopes(["orders.read"]);
-        client.UpdateCertificate(
-            Convert.ToHexString(SHA256.HashData(clientCertificate.RawData)),
-            clientCertificate.Subject,
-            clientCertificate.NotAfter);
-        fixture.ClientRepository.GetByClientIdAsync(client.ClientId, Arg.Any<CancellationToken>()).Returns(client);
+        fixture.IssuanceContextProvider
+            .ResolveAsync("orders-service", clientCertificate, Arg.Any<CancellationToken>())
+            .Returns(new IssuanceContext(
+                Guid.NewGuid(),
+                "orders-service",
+                clientCertificate,
+                ["orders.read"],
+                []));
         var tokenEndpointProof = CreateDpopProof(
             dpopKey,
             accessToken: null,
@@ -132,7 +124,7 @@ public sealed class DpopBoundAccessTokenValidatorTests
 
         var token = await fixture.AuthorizationServer.IssueClientCredentialsTokenAsync(
             "client_credentials",
-            client.ClientId,
+            "orders-service",
             "orders.read",
             clientCertificate,
             tokenEndpointProof);
@@ -239,7 +231,7 @@ public sealed class DpopBoundAccessTokenValidatorTests
     }
 
     private sealed record TestFixture(
-        IMachineClientRepository ClientRepository,
+        IIssuanceContextProvider IssuanceContextProvider,
         AuthorizationServerService AuthorizationServer,
         AccessTokenValidator AccessTokenValidator,
         TestSigningKeyStore SigningKeyStore,
