@@ -20,7 +20,7 @@ namespace Backend.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.27");
 
-            modelBuilder.Entity("Backend.Domain.Entities.MachineClient", b =>
+            modelBuilder.Entity("Backend.Idp.Domain.Entities.MachineClient", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -52,7 +52,7 @@ namespace Backend.Infrastructure.Migrations
                     b.ToTable("MachineClients");
                 });
 
-            modelBuilder.Entity("Backend.Domain.Entities.User", b =>
+            modelBuilder.Entity("Backend.Idp.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()

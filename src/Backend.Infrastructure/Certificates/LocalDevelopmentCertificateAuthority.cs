@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using Backend.Domain.Exceptions;
-using Backend.Domain.Services;
+using Backend.Idp.Domain.Exceptions;
+using Backend.Idp.Domain.Services;
 
 namespace Backend.Infrastructure.Certificates;
 

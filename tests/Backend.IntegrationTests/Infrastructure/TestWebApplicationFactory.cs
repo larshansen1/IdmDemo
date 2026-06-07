@@ -5,7 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using Backend.Application.Models.Auth;
-using Backend.Domain.Entities;
+using Backend.Idp.Domain.Entities;
 using Backend.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;

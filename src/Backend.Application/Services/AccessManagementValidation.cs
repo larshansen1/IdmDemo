@@ -1,5 +1,5 @@
-using Backend.Domain.Exceptions;
-using Backend.Domain.Repositories;
+using Backend.Idp.Domain.Exceptions;
+using Backend.Idp.Domain.Repositories;
 
 namespace Backend.Application.Services;
 

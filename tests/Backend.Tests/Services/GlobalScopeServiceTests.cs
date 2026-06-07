@@ -1,9 +1,9 @@
 using Backend.Application.Models.Scim;
 using Backend.Application.Models.Scopes;
 using Backend.Application.Services;
-using Backend.Domain.Entities;
-using Backend.Domain.Exceptions;
-using Backend.Domain.Repositories;
+using Backend.Idp.Domain.Entities;
+using Backend.Idp.Domain.Exceptions;
+using Backend.Idp.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ReturnsExtensions;

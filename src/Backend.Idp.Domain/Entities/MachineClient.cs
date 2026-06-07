@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace Backend.Domain.Entities;
+namespace Backend.Idp.Domain.Entities;
 
 public sealed class MachineClient
 {

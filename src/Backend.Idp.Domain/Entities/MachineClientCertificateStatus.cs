@@ -1,4 +1,4 @@
-namespace Backend.Domain.Entities;
+namespace Backend.Idp.Domain.Entities;
 
 public enum MachineClientCertificateStatus
 {

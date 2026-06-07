@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Backend.Domain.Entities;
+using Backend.Idp.Domain.Entities;
 using Backend.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 

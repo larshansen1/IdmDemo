@@ -1,5 +1,5 @@
-using Backend.Domain.Entities;
-using Backend.Domain.Repositories;
+using Backend.Idp.Domain.Entities;
+using Backend.Idp.Domain.Repositories;
 using Backend.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 

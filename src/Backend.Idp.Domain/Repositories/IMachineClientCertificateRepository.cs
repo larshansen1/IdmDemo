@@ -1,6 +1,6 @@
-using Backend.Domain.Entities;
+using Backend.Idp.Domain.Entities;
 
-namespace Backend.Domain.Repositories;
+namespace Backend.Idp.Domain.Repositories;
 
 public interface IMachineClientCertificateRepository
 {

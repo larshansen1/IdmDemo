@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Backend.Domain.Exceptions;
+using Backend.Idp.Domain.Exceptions;
 
 namespace Backend.Application.Scim;
 

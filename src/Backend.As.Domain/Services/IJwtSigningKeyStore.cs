@@ -1,4 +1,4 @@
-namespace Backend.Domain.Services;
+namespace Backend.As.Domain.Services;
 
 public interface IJwtSigningKeyStore
 {

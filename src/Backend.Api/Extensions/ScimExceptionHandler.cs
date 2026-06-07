@@ -1,5 +1,5 @@
 using Backend.Application.Models.Scim;
-using Backend.Domain.Exceptions;
+using Backend.Idp.Domain.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 

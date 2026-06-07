@@ -1,5 +1,5 @@
 using Backend.Application.Scim;
-using Backend.Domain.Exceptions;
+using Backend.Idp.Domain.Exceptions;
 using Xunit;
 
 namespace Backend.Tests.Scim;

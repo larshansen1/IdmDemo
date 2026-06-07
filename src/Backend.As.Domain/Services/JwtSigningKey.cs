@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace Backend.Domain.Services;
+namespace Backend.As.Domain.Services;
 
 public sealed class JwtSigningKey
 {

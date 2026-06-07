@@ -20,7 +20,7 @@ namespace Backend.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.27");
 
-            modelBuilder.Entity("Backend.Domain.Entities.MachineClient", b =>
+            modelBuilder.Entity("Backend.Idp.Domain.Entities.MachineClient", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -73,7 +73,7 @@ namespace Backend.Infrastructure.Migrations
                     b.ToTable("MachineClients");
                 });
 
-            modelBuilder.Entity("Backend.Domain.Entities.MachineClientCertificate", b =>
+            modelBuilder.Entity("Backend.Idp.Domain.Entities.MachineClientCertificate", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -144,7 +144,7 @@ namespace Backend.Infrastructure.Migrations
                     b.ToTable("MachineClientCertificates");
                 });
 
-            modelBuilder.Entity("Backend.Domain.Entities.User", b =>
+            modelBuilder.Entity("Backend.Idp.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -180,9 +180,9 @@ namespace Backend.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("Backend.Domain.Entities.MachineClientCertificate", b =>
+            modelBuilder.Entity("Backend.Idp.Domain.Entities.MachineClientCertificate", b =>
                 {
-                    b.HasOne("Backend.Domain.Entities.MachineClient", null)
+                    b.HasOne("Backend.Idp.Domain.Entities.MachineClient", null)
                         .WithMany()
                         .HasForeignKey("MachineClientId")
                         .OnDelete(DeleteBehavior.Cascade)

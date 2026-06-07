@@ -1,4 +1,4 @@
-namespace Backend.Domain.Services;
+namespace Backend.Idp.Domain.Services;
 
 public sealed class IssuedClientCertificate
 {
