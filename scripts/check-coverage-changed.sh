@@ -19,8 +19,10 @@ fi
 ASSEMBLIES=$(while IFS= read -r FILE; do
   if [[ "$FILE" == src/Backend.Application/* ]]; then
     echo "Backend.Application"
-  elif [[ "$FILE" == src/Backend.Domain/* ]]; then
-    echo "Backend.Domain"
+  elif [[ "$FILE" == src/Backend.Idp.Domain/* ]]; then
+    echo "Backend.Idp.Domain"
+  elif [[ "$FILE" == src/Backend.As.Domain/* ]]; then
+    echo "Backend.As.Domain"
   elif [[ "$FILE" == src/Backend.Mcp/* ]]; then
     echo "Backend.Mcp"
   fi
