@@ -8,7 +8,6 @@ COPY global.json ./
 COPY src/Backend.Idp.Domain/Backend.Idp.Domain.csproj src/Backend.Idp.Domain/
 COPY src/Backend.As.Domain/Backend.As.Domain.csproj src/Backend.As.Domain/
 COPY src/Backend.Application/Backend.Application.csproj src/Backend.Application/
-COPY src/Backend.Infrastructure/Backend.Infrastructure.csproj src/Backend.Infrastructure/
 COPY src/Backend.Mcp/Backend.Mcp.csproj src/Backend.Mcp/
 
 RUN dotnet restore src/Backend.Mcp/Backend.Mcp.csproj

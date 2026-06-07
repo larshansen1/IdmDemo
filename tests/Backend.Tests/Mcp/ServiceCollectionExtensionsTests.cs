@@ -37,7 +37,7 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.NotNull(provider.GetRequiredService<McpToolCallFilter>());
         Assert.NotNull(provider.GetRequiredService<IMcpToolAuditLogger>());
         Assert.NotNull(provider.GetRequiredService<IMcpReadinessProbe>());
-        Assert.NotNull(provider.GetRequiredService<IJwtSigningKeyStore>());
+        Assert.IsType<JwksJwtSigningKeyStore>(provider.GetRequiredService<IJwtSigningKeyStore>());
         Assert.NotNull(provider.GetRequiredService<IDpopReplayCache>());
 
         using var scope = provider.CreateScope();

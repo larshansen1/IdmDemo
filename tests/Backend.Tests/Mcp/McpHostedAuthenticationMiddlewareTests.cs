@@ -1,6 +1,10 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Backend.Application.Models.Auth;
 using Backend.Application.Services;
 using Backend.Mcp;
+using Backend.Mcp.Api;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -325,6 +329,45 @@ public sealed class McpHostedAuthenticationMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_TokenSignedWithUnknownJwksKey_ReturnsUnauthorized()
+    {
+        using var trustedKey = RSA.Create(2048);
+        using var unknownKey = RSA.Create(2048);
+        var apiClient = Substitute.For<IIdmApiClient>();
+        apiClient
+            .GetJwksAsync(null, Arg.Any<CancellationToken>())
+            .Returns(new IdmApiCallResult<JwksResponse>(
+                "local",
+                "correlation-id",
+                CreateJwksResponse(trustedKey, "trusted-key")));
+        var tokenValidator = new AccessTokenValidator(
+            new AuthorizationServerOptions
+            {
+                Issuer = "https://issuer.test",
+                Audience = "api://mcp",
+            },
+            new JwksJwtSigningKeyStore(apiClient));
+
+        var nextCalled = false;
+        var middleware = new McpHostedAuthenticationMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+        var context = CreateContext();
+        context.Request.Headers.Authorization = $"Bearer {CreateAccessToken(unknownKey, "unknown-key")}";
+
+        await middleware.InvokeAsync(
+            context,
+            Options.Create(new McpRuntimeOptions { Profile = McpProfile.LocalHostedDevelopment }),
+            tokenValidator,
+            Substitute.For<IDpopBoundAccessTokenValidator>());
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.False(nextCalled);
+    }
+
+    [Fact]
     public async Task InvokeAsync_ValidatedTokenAddsCertificateConfirmationClaim()
     {
         var tokenValidator = Substitute.For<IAccessTokenValidator>();
@@ -368,5 +411,64 @@ public sealed class McpHostedAuthenticationMiddlewareTests
             DpopJwkThumbprint = dpopThumbprint,
             CertificateThumbprintSha256 = certificateThumbprint,
         };
+    }
+
+    private static JwksResponse CreateJwksResponse(RSA rsa, string keyId)
+    {
+        var parameters = rsa.ExportParameters(false);
+        return new JwksResponse
+        {
+            Keys =
+            [
+                new JsonWebKeyResponse
+                {
+                    KeyId = keyId,
+                    Modulus = Base64UrlEncode(parameters.Modulus ?? []),
+                    Exponent = Base64UrlEncode(parameters.Exponent ?? []),
+                },
+            ],
+        };
+    }
+
+    private static string CreateAccessToken(RSA rsa, string keyId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var header = new Dictionary<string, object?>
+        {
+            ["alg"] = "RS256",
+            ["typ"] = "at+jwt",
+            ["kid"] = keyId,
+        };
+        var payload = new Dictionary<string, object?>
+        {
+            ["iss"] = "https://issuer.test",
+            ["aud"] = "api://mcp",
+            ["sub"] = "subject",
+            ["client_id"] = "client",
+            ["scope"] = McpScopes.Read,
+            ["iat"] = now.ToUnixTimeSeconds(),
+            ["exp"] = now.AddMinutes(5).ToUnixTimeSeconds(),
+            ["cnf"] = new Dictionary<string, object?>
+            {
+                ["x5t#S256"] = "certificate-thumbprint",
+            },
+        };
+        var signingInput = string.Create(
+            null,
+            $"{Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(header))}.{Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payload))}");
+        var signature = rsa.SignData(
+            Encoding.ASCII.GetBytes(signingInput),
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+
+        return string.Create(null, $"{signingInput}.{Base64UrlEncode(signature)}");
+    }
+
+    private static string Base64UrlEncode(byte[] bytes)
+    {
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace("+", "-", StringComparison.Ordinal)
+            .Replace("/", "_", StringComparison.Ordinal);
     }
 }
