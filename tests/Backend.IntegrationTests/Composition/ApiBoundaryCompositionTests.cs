@@ -1,5 +1,8 @@
 using Backend.Api.Composition;
+using Backend.Application.Services;
+using Backend.As.Domain;
 using Backend.IntegrationTests.Infrastructure;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -14,6 +17,34 @@ public sealed class ApiBoundaryCompositionTests : IClassFixture<TestWebApplicati
     {
         ArgumentNullException.ThrowIfNull(factory);
         this._factory = factory;
+    }
+
+    [Fact]
+    public void AddIdpAdminApiBoundary_RegistersIdpIssuanceContextProvider()
+    {
+        var builder = WebApplication.CreateBuilder();
+
+        builder.AddIdpAdminApiBoundary();
+
+        var descriptor = Assert.Single(
+            builder.Services,
+            service => service.ServiceType == typeof(IIssuanceContextProvider));
+        Assert.Equal(typeof(IdpIssuanceContextProvider), descriptor.ImplementationType);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
+    }
+
+    [Fact]
+    public void AddAuthorizationServerBoundary_RegistersAuthorizationServerService()
+    {
+        var builder = WebApplication.CreateBuilder();
+
+        builder.AddAuthorizationServerBoundary();
+
+        var descriptor = Assert.Single(
+            builder.Services,
+            service => service.ServiceType == typeof(IAuthorizationServerService));
+        Assert.Equal(typeof(AuthorizationServerService), descriptor.ImplementationType);
+        Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime);
     }
 
     [Theory]

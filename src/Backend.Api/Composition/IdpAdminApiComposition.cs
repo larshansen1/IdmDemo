@@ -1,6 +1,8 @@
 using Backend.Api.Extensions;
 using Backend.Api.Middleware;
 using Backend.Api.Startup;
+using Backend.Application.Services;
+using Backend.As.Domain;
 
 namespace Backend.Api.Composition;
 
@@ -13,6 +15,7 @@ public static class IdpAdminApiComposition
         builder.Services.AddExceptionHandler<ScimExceptionHandler>();
         builder.Services.AddProblemDetails();
         builder.Services.AddHostedService<ScimAdminSeeder>();
+        builder.Services.AddScoped<IIssuanceContextProvider, IdpIssuanceContextProvider>();
 
         return builder;
     }
