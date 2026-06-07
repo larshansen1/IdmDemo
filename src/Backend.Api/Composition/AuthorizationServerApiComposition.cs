@@ -31,6 +31,7 @@ public static class AuthorizationServerApiComposition
             .Bind(authorizationServerOptions);
 
         builder.Services.AddApplication(authorizationServerOptions);
+        builder.Services.AddScoped<IAuthorizationServerService, AuthorizationServerService>();
         builder.Services.AddScoped<IDpopReplayCache, PersistentDpopReplayCache>();
         builder.Services.AddSingleton<IClientCertificateReader, ClientCertificateReader>();
         builder.Services.AddAuthorizationServerRateLimiting(builder.Configuration);
