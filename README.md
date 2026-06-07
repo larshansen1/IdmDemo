@@ -5,6 +5,11 @@ agentic development workflows. It combines a small Identity Provider, an
 OAuth-style Authorization Server, and an MCP Resource Server / IdP Admin
 Interface behind explicit runtime boundaries.
 
+The core architecture decision is that the Identity Provider is the system of
+record. It owns identity state, credentials, roles, scopes, certificates, and
+the certificate authority. The Authorization Server and MCP Resource Server are
+consumers of that state rather than co-owners of it.
+
 The project is not a production-grade identity platform, but it is built with
 clean architecture, structured observability, automated testing, and enforced
 quality gates so the security and deployment tradeoffs are visible.
@@ -36,6 +41,10 @@ Issued JWT access tokens use `typ: at+jwt`, explicit resource audiences, roles,
 and scopes. Token issuance supports certificate-bound bearer tokens and
 DPoP-bound tokens with replay protection.
 
+The AS owns token shape and signing. At issuance time it resolves current client
+validity through the IdP-owned `IIssuanceContextProvider` read port, then signs
+the token with the AS signing key store.
+
 ### MCP Resource Server / IdP Admin Interface
 
 `Backend.Mcp` exposes IdP administration as MCP tools. `LocalStdio` is the
@@ -43,6 +52,10 @@ developer-machine profile and trusts the local OS process boundary. Hosted MCP
 profiles validate caller tokens, enforce MCP scopes per tool, emit audit events,
 and call the private IdP admin API with a separate configured machine-client
 credential.
+
+Hosted MCP validates access tokens against the AS JWKS endpoint through the
+configured IdM API client. It does not read the AS signing key file and does not
+reference `Backend.Infrastructure`.
 
 In production, public traffic reaches only the hosted MCP resource and the
 explicitly exposed authorization-server discovery/token routes. Private IdP
@@ -93,6 +106,8 @@ traceable to a published specification.
 - **Trusted reverse proxy** — nginx terminates TLS, strips and recreates forwarded headers (`X-Client-Cert`), and proxies only explicitly allowed routes to backend services.
 - **Hosted production requires DPoP** — bearer tokens are accepted only in `LocalHostedDevelopment` for local testing; `HostedProduction` rejects them.
 - **MCP tool authorization** — enforces scopes from the caller's access token (`idm.mcp.read`, `idm.mcp.write`, `idm.mcp.destructive`, `idm.mcp.certificates`). Destructive tools additionally require `confirm: true`.
+- **MCP JWKS validation** — hosted MCP fetches public signing keys from
+  `/.well-known/jwks.json` and rejects tokens signed by unknown keys.
 
 ---
 
@@ -155,7 +170,8 @@ determined per-assembly.
 ├── src/
 │   ├── Backend.Api/              # ASP.NET Core Web API, controllers, middleware, Program.cs
 │   ├── Backend.Application/      # Services, DTOs, SCIM filter parser
-│   ├── Backend.Domain/           # Entities, repository interfaces, domain exceptions
+│   ├── Backend.Idp.Domain/       # IdP entities, repository interfaces, CA abstractions
+│   ├── Backend.As.Domain/        # AS ports and signing-key abstractions
 │   ├── Backend.Infrastructure/   # EF Core DbContext, SQLite, repositories, migrations
 │   └── Backend.Mcp/              # MCP Resource Server / IdP Admin Interface tools
 ├── tests/
@@ -180,7 +196,7 @@ determined per-assembly.
 
 | Tool | Purpose | Install |
 |---|---|---|
-| `dotnet` 8 | Build, test, format | [dot.net/download](https://dot.net/download) |
+| `dotnet` 10 | Build, test, format | [dot.net/download](https://dot.net/download) |
 | `lizard` | Complexity check | `pipx install lizard` |
 | `jscpd` | Duplicate detection | `npm install -g jscpd` |
 | `gitleaks` | Secret scanning | `brew install gitleaks` / [releases](https://github.com/gitleaks/gitleaks/releases) |

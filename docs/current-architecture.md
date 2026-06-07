@@ -1,7 +1,7 @@
 # Current Architecture
 
 This document reflects the current deployed IdmDemo architecture as of the
-OAuth-admin and hosted MCP work.
+IdP-as-system-of-record refactor, OAuth-admin work, and hosted MCP work.
 
 It is the current runtime source of truth. `product.md` remains the
 epic-oriented product roadmap and original requirement record. Documents under
@@ -28,6 +28,25 @@ IdmDemo currently has three product/architecture roles:
 Authorization Server endpoints.
 
 `Backend.Mcp` hosts the MCP Resource Server / IdP Admin Interface.
+
+The ownership rule is:
+
+> Anything that writes identity, credential, or catalog state goes through the
+> IdP. The Authorization Server and MCP Resource Server are consumers.
+
+The project graph enforces that split:
+
+```text
+Backend.Idp.Domain          -> no project dependencies
+Backend.As.Domain           -> no project dependencies
+Backend.Application         -> Backend.Idp.Domain + Backend.As.Domain
+Backend.Infrastructure      -> Backend.Idp.Domain + Backend.As.Domain
+Backend.Api                 -> Backend.Application + Backend.Infrastructure
+Backend.Mcp                 -> Backend.Application
+```
+
+`Backend.Mcp` does not reference `Backend.Infrastructure`; it reaches IdP state
+only through the private admin API.
 
 Production runs both services with Docker Compose:
 
@@ -59,6 +78,11 @@ POST /mcp
 
 Hosted production MCP requires an IdmDemo access token with audience
 `idm-demo-mcp` and requires DPoP for MCP calls.
+
+MCP validates caller access tokens with the AS public keys exposed at
+`/.well-known/jwks.json`. The hosted MCP service fetches those keys through
+`IIdmApiClient.GetJwksAsync` and adapts them with `JwksJwtSigningKeyStore`; it
+does not read the AS private signing-key file.
 
 ## Private Boundary
 
@@ -100,15 +124,71 @@ certificate metadata and thumbprint.
 
 1. A registered machine client presents its certificate to
    `POST /connect/token`.
-2. `Backend.Api` validates the certificate thumbprint against the machine-client
-   record and optional managed certificate collection.
-3. Issued JWT access tokens use header `typ: at+jwt`, and token validators
+2. The AS asks the IdP-owned `IIssuanceContextProvider` read port to resolve
+   current client validity, certificate status, active scopes, and active roles.
+3. The AS assembles token claims, resource audience, confirmation binding, and
+   lifetime, then signs the JWT with the AS signing key store.
+4. Issued JWT access tokens use header `typ: at+jwt`, and token validators
    require that type.
-4. Without a `DPoP` proof, the token response is a certificate-bound bearer
+5. Without a `DPoP` proof, the token response is a certificate-bound bearer
    token with `cnf.x5t#S256`.
-5. With a valid `DPoP` proof, the token response has `token_type=DPoP` and
+6. With a valid `DPoP` proof, the token response has `token_type=DPoP` and
    `cnf.jkt`.
-6. Hosted production MCP accepts only DPoP-bound calls to `/mcp`.
+7. Hosted production MCP accepts only DPoP-bound calls to `/mcp`.
+8. MCP validates caller tokens against AS JWKS public keys and rejects tokens
+   signed by unknown keys.
+
+## Ownership Details
+
+### Identity Provider
+
+The IdP owns:
+
+- users
+- machine clients
+- global roles and scopes
+- machine-client certificates and revocation state
+- the local certificate authority
+- the admin API write paths
+
+It also implements the AS read port:
+
+```text
+IIssuanceContextProvider -> IdpIssuanceContextProvider
+```
+
+That provider resolves the current issuance context from IdP state. The AS sees
+only the resolved `IssuanceContext`; it does not query identity repositories
+directly.
+
+### Authorization Server
+
+The AS owns:
+
+- discovery and JWKS metadata
+- `client_credentials` token issuance
+- token claim shape and `typ: at+jwt`
+- resource audience resolution
+- certificate-bound and DPoP-bound confirmation claims
+- JWT signing keys and DPoP replay validation
+
+`ResolveAudience` remains AS-side. It uses the active scopes already supplied in
+`IssuanceContext`; it does not reach back into IdP persistence.
+
+### MCP Resource Server
+
+Hosted MCP owns:
+
+- MCP transport and `/mcp` request handling
+- caller token validation for the MCP audience
+- DPoP enforcement in `HostedProduction`
+- per-tool `idm.mcp.*` scope checks
+- audit events and mutation guards
+- private admin API calls using its configured backend machine-client
+  credential
+
+MCP is not a persistence or signing-key owner. It validates tokens with AS JWKS
+public keys and performs IdP administration through the private API.
 
 ## Smoke Tests
 
