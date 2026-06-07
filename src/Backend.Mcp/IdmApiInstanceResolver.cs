@@ -49,6 +49,6 @@ public sealed class IdmApiInstanceResolver : IIdmApiInstanceResolver
             throw new McpConfigurationException($"IdM API instance '{name}' is missing ClientCertificatePath.");
         }
 
-        return new ResolvedIdmApiInstance(name, instance.BaseUrl, instance.ClientId, instance.ClientCertificatePath);
+        return new ResolvedIdmApiInstance(name, instance.BaseUrl, instance.ClientId, instance.ClientCertificatePath, instance.AuthorityUrl);
     }
 }

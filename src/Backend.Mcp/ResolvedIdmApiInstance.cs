@@ -1,3 +1,3 @@
 namespace Backend.Mcp;
 
-public sealed record ResolvedIdmApiInstance(string Name, Uri BaseUrl, string ClientId, string ClientCertificatePath);
+public sealed record ResolvedIdmApiInstance(string Name, Uri BaseUrl, string ClientId, string ClientCertificatePath, Uri? AuthorityUrl = null);

@@ -60,11 +60,13 @@ public sealed class IdmApiTokenProvider : IIdmApiTokenProvider
         using var cert = LoadCertificate(resolved.ClientCertificatePath);
         using var httpClient = this._httpClientFactory.CreateClient("idm-token");
         var tokenUri = new Uri(resolved.BaseUrl, "connect/token");
+        var authorityBase = resolved.AuthorityUrl ?? resolved.BaseUrl;
+        var tokenDpopUri = new Uri(authorityBase, "connect/token");
 
 #pragma warning disable CA2000 // dpopKey is owned by BoundToken stored in the cache; disposal is managed by cache eviction
         var dpopKey = RSA.Create(2048);
 #pragma warning restore CA2000
-        var dpopProof = DpopProofFactory.Create(dpopKey, "POST", tokenUri);
+        var dpopProof = DpopProofFactory.Create(dpopKey, "POST", tokenDpopUri);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, tokenUri);
         request.Headers.Add("X-Client-Cert", Convert.ToBase64String(cert.RawData));
