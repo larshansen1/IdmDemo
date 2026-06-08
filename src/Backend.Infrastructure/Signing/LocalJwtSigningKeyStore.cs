@@ -86,13 +86,7 @@ public sealed class LocalJwtSigningKeyStore : IJwtSigningKeyStore, IDisposable
             PrivateKeyPem = rsa.ExportRSAPrivateKeyPem(),
         };
 
-        var fileOptions = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
-        if (!OperatingSystem.IsWindows())
-        {
-            fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        }
-
-        var stream = File.Open(this._path, fileOptions);
+        var stream = File.Create(this._path);
         await using (stream.ConfigureAwait(false))
         {
             await JsonSerializer.SerializeAsync(stream, file, cancellationToken: cancellationToken).ConfigureAwait(false);

@@ -150,13 +150,7 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
                 PrivateKeyPem = rsa.ExportPkcs8PrivateKeyPem(),
             };
 
-            var fileOptions = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
-            if (!OperatingSystem.IsWindows())
-            {
-                fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-            }
-
-            using var stream = File.Open(path, fileOptions);
+            using var stream = File.Create(path);
             await JsonSerializer.SerializeAsync(stream, storedCertificate, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
