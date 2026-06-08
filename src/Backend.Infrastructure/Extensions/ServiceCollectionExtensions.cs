@@ -40,7 +40,11 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlite(connectionString));
 
-        services.AddDataProtection();
+        var dpKeysPath = Path.Combine(
+            Path.GetDirectoryName(signingKeyPath) ?? AppContext.BaseDirectory,
+            ".dp-keys");
+        services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(dpKeysPath));
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IMachineClientRepository, MachineClientRepository>();
