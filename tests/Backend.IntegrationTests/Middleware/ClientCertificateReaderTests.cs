@@ -60,6 +60,19 @@ public sealed class ClientCertificateReaderTests
     }
 
     [Fact]
+    public void Read_EnabledAndIpv4MappedIpv6TrustedProxy_ReturnsCertificate()
+    {
+        var reader = CreateReader(enabled: true, trustedProxies: ["172.22.0.1"]);
+        using var cert = CreateCertificate();
+        var mappedAddress = IPAddress.Parse("172.22.0.1").MapToIPv6();
+        var ctx = CreateContext(mappedAddress, Convert.ToBase64String(cert.RawData));
+
+        var result = reader.Read(ctx);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
     public void Read_TlsClientCertificateOnConnection_ReturnsCertWithoutIpCheck()
     {
         var reader = CreateReader(enabled: false, trustedProxies: []);

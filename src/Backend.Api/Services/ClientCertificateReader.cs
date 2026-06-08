@@ -40,7 +40,17 @@ public sealed class ClientCertificateReader : IClientCertificateReader
         }
 
         var remoteIp = context.Connection.RemoteIpAddress;
-        if (remoteIp is null || !this._trustedProxies.Contains(remoteIp))
+        if (remoteIp is null)
+        {
+            return null;
+        }
+
+        if (remoteIp.IsIPv4MappedToIPv6)
+        {
+            remoteIp = remoteIp.MapToIPv4();
+        }
+
+        if (!this._trustedProxies.Contains(remoteIp))
         {
             return null;
         }
