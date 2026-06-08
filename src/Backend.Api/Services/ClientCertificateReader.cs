@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography.X509Certificates;
 
 namespace Backend.Api.Services;
@@ -8,6 +9,7 @@ public sealed class ClientCertificateReader : IClientCertificateReader
 
     private readonly bool _enableForwardedCertificate;
     private readonly string _forwardedCertificateHeader;
+    private readonly HashSet<IPAddress> _trustedProxies;
 
     public ClientCertificateReader(IConfiguration configuration)
     {
@@ -16,6 +18,11 @@ public sealed class ClientCertificateReader : IClientCertificateReader
             "AuthorizationServer:EnableForwardedClientCertificate");
         this._forwardedCertificateHeader = configuration["AuthorizationServer:ForwardedClientCertificateHeader"]
             ?? _defaultForwardedCertificateHeader;
+
+        var proxyStrings = configuration
+            .GetSection("AuthorizationServer:TrustedProxies")
+            .Get<string[]>() ?? [];
+        this._trustedProxies = proxyStrings.Select(IPAddress.Parse).ToHashSet();
     }
 
     public X509Certificate2? Read(HttpContext context)
@@ -28,6 +35,12 @@ public sealed class ClientCertificateReader : IClientCertificateReader
         }
 
         if (!this._enableForwardedCertificate)
+        {
+            return null;
+        }
+
+        var remoteIp = context.Connection.RemoteIpAddress;
+        if (remoteIp is null || !this._trustedProxies.Contains(remoteIp))
         {
             return null;
         }

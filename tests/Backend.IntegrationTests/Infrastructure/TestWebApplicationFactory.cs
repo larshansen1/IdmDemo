@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -125,6 +126,8 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>, 
         builder.UseSetting("AuthorizationServer:SigningKeyPath", this._signingKeyPath);
         builder.UseSetting("AuthorizationServer:EnableForwardedClientCertificate", "true");
         builder.UseSetting("AuthorizationServer:ForwardedClientCertificateHeader", "X-Client-Cert");
+        builder.UseSetting("AuthorizationServer:TrustedProxies:0", "127.0.0.1");
+        builder.UseSetting("AuthorizationServer:TrustedProxies:1", "::1");
         builder.UseSetting("CertificateAuthority:KeyPath", this._certificateAuthorityPath);
         if (this._tokenRateLimitPermitLimit is int tokenRateLimitPermitLimit)
         {
@@ -141,6 +144,8 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>, 
 
             services.AddDbContext<AppDbContext>(options =>
                 options.UseSqlite($"Data Source={this._dbPath}"));
+
+            services.AddSingleton<IStartupFilter>(new SetLoopbackRemoteIpFilter());
         });
     }
 
