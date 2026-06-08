@@ -197,7 +197,15 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
         {
             if (File.Exists(this._certificateAuthorityPath))
             {
-                return await this.ReadCertificateAuthorityAsync(this._certificateAuthorityPath, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    return await this.ReadCertificateAuthorityAsync(this._certificateAuthorityPath, cancellationToken).ConfigureAwait(false);
+                }
+                catch (CryptographicException)
+                {
+                    // Key ring was rotated or lost — discard the unreadable file and regenerate.
+                    File.Delete(this._certificateAuthorityPath);
+                }
             }
 
             using var certificate = CreateCertificateAuthority();

@@ -24,7 +24,15 @@ public sealed class LocalJwtSigningKeyStore : IJwtSigningKeyStore, IDisposable
         {
             if (File.Exists(this._path))
             {
-                return await this.ReadKeyAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    return await this.ReadKeyAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (CryptographicException)
+                {
+                    // Key ring was rotated or lost — discard the unreadable file and regenerate.
+                    File.Delete(this._path);
+                }
             }
 
             var key = CreateKey();

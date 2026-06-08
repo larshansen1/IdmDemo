@@ -81,6 +81,33 @@ public sealed class LocalJwtSigningKeyStoreTests
     }
 
     [Fact]
+    public async Task GetActiveKeyAsync_LostKeyRing_RegeneratesKey()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"idm_signing_{Guid.NewGuid():N}.json");
+        try
+        {
+            using (var firstStore = new LocalJwtSigningKeyStore(path, new EphemeralDataProtectionProvider().CreateProtector("test")))
+            {
+                await firstStore.GetActiveKeyAsync();
+            }
+
+            // New store with a different (incompatible) key ring — simulates container restart before #147
+            var protectorB = new EphemeralDataProtectionProvider().CreateProtector("test");
+            using var secondStore = new LocalJwtSigningKeyStore(path, protectorB);
+
+            var key = await secondStore.GetActiveKeyAsync();
+
+            Assert.True(File.Exists(path));
+            Assert.NotEmpty(key.KeyId);
+            Assert.NotNull(key.Parameters.D);
+        }
+        finally
+        {
+            DeleteIfExists(path);
+        }
+    }
+
+    [Fact]
     public async Task GetActiveKeyAsync_LegacyPlaintextFile_MigratesToEncrypted()
     {
         var path = Path.Combine(Path.GetTempPath(), $"idm_signing_{Guid.NewGuid():N}.json");
