@@ -135,4 +135,19 @@ public sealed partial class McpToolAuditLogger
         string? resourceId,
         string? certificateId,
         string? correlationId);
+
+    [LoggerMessage(EventId = 6104, EventName = DestructiveToolSucceededEventName, Level = LogLevel.Warning, Message = "{AuditEvent} Tool={ToolName} Subject={Subject} ClientId={ClientId} Scopes={Scopes} Instance={Instance} Profile={Profile} Transport={Transport} ResourceId={ResourceId} CertificateId={CertificateId} CorrelationId={CorrelationId}")]
+    private static partial void LogDestructiveToolSucceeded(
+        ILogger logger,
+        string auditEvent,
+        string toolName,
+        string? subject,
+        string? clientId,
+        string scopes,
+        string instance,
+        string profile,
+        string transport,
+        string? resourceId,
+        string? certificateId,
+        string? correlationId);
 }

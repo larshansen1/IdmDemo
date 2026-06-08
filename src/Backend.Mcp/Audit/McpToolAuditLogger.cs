@@ -11,6 +11,7 @@ public sealed partial class McpToolAuditLogger(ILogger<McpToolAuditLogger> logge
     public const string ToolDeniedEventName = "McpToolDenied";
     public const string ToolFailedEventName = "McpToolFailed";
     public const string ToolSucceededEventName = "McpToolSucceeded";
+    public const string DestructiveToolSucceededEventName = "McpDestructiveToolSucceeded";
 
     public static string? ExtractCorrelationId(CallToolResult result)
     {
@@ -122,6 +123,26 @@ public sealed partial class McpToolAuditLogger(ILogger<McpToolAuditLogger> logge
             context.Destructive,
             context.RequiresCertificateScope,
             context.Confirm,
+            context.ResourceId,
+            context.CertificateId,
+            ExtractCorrelationId(result) ?? context.CorrelationId);
+    }
+
+    public void DestructiveToolSucceeded(McpToolAuditContext context, CallToolResult result)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(result);
+
+        LogDestructiveToolSucceeded(
+            logger,
+            DestructiveToolSucceededEventName,
+            context.ToolName,
+            context.Subject,
+            context.ClientId,
+            FormatScopes(context.Scopes),
+            context.Instance,
+            context.Profile,
+            context.Transport,
             context.ResourceId,
             context.CertificateId,
             ExtractCorrelationId(result) ?? context.CorrelationId);

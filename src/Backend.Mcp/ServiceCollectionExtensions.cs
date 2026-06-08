@@ -4,6 +4,7 @@ using Backend.As.Domain.Services;
 using Backend.Mcp.Api;
 using Backend.Mcp.Audit;
 using Backend.Mcp.Health;
+using Backend.Mcp.RateLimit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -47,6 +48,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDpopBoundAccessTokenValidator, DpopBoundAccessTokenValidator>();
         services.AddSingleton<IIdmApiInstanceResolver, IdmApiInstanceResolver>();
         services.AddSingleton<IMcpToolPolicyProvider, McpToolPolicyProvider>();
+        services.AddSingleton<IDestructiveCallRateLimiter, DestructiveCallRateLimiter>();
         services.AddSingleton<IMcpMutationGuard, McpMutationGuard>();
         services.AddSingleton<McpToolAuditContextFactory>();
         services.AddSingleton<McpToolCallFilter>();

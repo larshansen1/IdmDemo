@@ -4,6 +4,7 @@ using Backend.Application.Models.Clients;
 using Backend.Application.Models.Scim;
 using Backend.Mcp;
 using Backend.Mcp.Api;
+using Backend.Mcp.RateLimit;
 using Backend.Mcp.Tools;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -155,7 +156,8 @@ public sealed class IdmMachineClientToolsTests
         var guard = new McpMutationGuard(
             Options.Create(new McpRuntimeOptions()),
             new McpToolPolicyProvider(),
-            new HttpContextAccessor());
+            new HttpContextAccessor(),
+            new DestructiveCallRateLimiter());
         return new IdmMachineClientTools(apiClient, guard, NullLogger<IdmMachineClientTools>.Instance);
     }
 }
