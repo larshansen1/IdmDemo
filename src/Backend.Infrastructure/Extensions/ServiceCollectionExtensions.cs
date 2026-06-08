@@ -5,6 +5,7 @@ using Backend.Infrastructure.Certificates;
 using Backend.Infrastructure.Persistence;
 using Backend.Infrastructure.Repositories;
 using Backend.Infrastructure.Signing;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -39,13 +40,25 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlite(connectionString));
 
+        services.AddDataProtection();
+
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IMachineClientRepository, MachineClientRepository>();
         services.AddScoped<IMachineClientCertificateRepository, MachineClientCertificateRepository>();
         services.AddScoped<IGlobalRoleRepository, GlobalRoleRepository>();
         services.AddScoped<IGlobalScopeRepository, GlobalScopeRepository>();
-        services.AddSingleton<IJwtSigningKeyStore>(_ => new LocalJwtSigningKeyStore(signingKeyPath));
-        services.AddSingleton<ILocalCertificateAuthority>(_ => new LocalDevelopmentCertificateAuthority(certificateAuthorityPath));
+        services.AddSingleton<IJwtSigningKeyStore>(sp =>
+        {
+            var protector = sp.GetRequiredService<IDataProtectionProvider>()
+                .CreateProtector("Backend.Infrastructure.Signing.LocalJwtSigningKeyStore");
+            return new LocalJwtSigningKeyStore(signingKeyPath, protector);
+        });
+        services.AddSingleton<ILocalCertificateAuthority>(sp =>
+        {
+            var protector = sp.GetRequiredService<IDataProtectionProvider>()
+                .CreateProtector("Backend.Infrastructure.Certificates.LocalDevelopmentCertificateAuthority");
+            return new LocalDevelopmentCertificateAuthority(certificateAuthorityPath, protector);
+        });
 
         return services;
     }
