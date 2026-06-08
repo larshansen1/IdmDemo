@@ -3,6 +3,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Backend.Idp.Domain.Exceptions;
 using Backend.Idp.Domain.Services;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Backend.Infrastructure.Certificates;
 
@@ -10,11 +11,13 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
 {
     private const int _caLifetimeYears = 5;
     private readonly string _certificateAuthorityPath;
+    private readonly IDataProtector _dataProtector;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public LocalDevelopmentCertificateAuthority(string certificateAuthorityPath)
+    public LocalDevelopmentCertificateAuthority(string certificateAuthorityPath, IDataProtector dataProtector)
     {
         this._certificateAuthorityPath = certificateAuthorityPath;
+        this._dataProtector = dataProtector;
     }
 
     public async Task<CertificateAuthorityCertificate> GetCertificateAsync(CancellationToken cancellationToken = default)
@@ -112,7 +115,7 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
         return request.CreateSelfSigned(notBefore, notAfter);
     }
 
-    private static async Task<X509Certificate2> ReadCertificateAuthorityAsync(
+    private async Task<X509Certificate2> ReadCertificateAuthorityAsync(
         string path,
         CancellationToken cancellationToken)
     {
@@ -123,13 +126,15 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("Stored certificate authority could not be read.");
 
+        var plainPem = this._dataProtector.Unprotect(storedCertificate.ProtectedKeyPem);
+
         using var certificate = X509Certificate2.CreateFromPem(storedCertificate.CertificatePem);
         using var rsa = RSA.Create();
-        rsa.ImportFromPem(storedCertificate.PrivateKeyPem);
+        rsa.ImportFromPem(plainPem);
         return certificate.CopyWithPrivateKey(rsa);
     }
 
-    private static async Task WriteCertificateAuthorityAsync(
+    private async Task WriteCertificateAuthorityAsync(
         string path,
         X509Certificate2 certificate,
         CancellationToken cancellationToken)
@@ -147,7 +152,7 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
             var storedCertificate = new StoredCertificateAuthority
             {
                 CertificatePem = certificate.ExportCertificatePem(),
-                PrivateKeyPem = rsa.ExportPkcs8PrivateKeyPem(),
+                ProtectedKeyPem = this._dataProtector.Protect(rsa.ExportPkcs8PrivateKeyPem()),
             };
 
             var fileOptions = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
@@ -169,12 +174,12 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
         {
             if (File.Exists(this._certificateAuthorityPath))
             {
-                return await ReadCertificateAuthorityAsync(this._certificateAuthorityPath, cancellationToken).ConfigureAwait(false);
+                return await this.ReadCertificateAuthorityAsync(this._certificateAuthorityPath, cancellationToken).ConfigureAwait(false);
             }
 
             using var certificate = CreateCertificateAuthority();
-            await WriteCertificateAuthorityAsync(this._certificateAuthorityPath, certificate, cancellationToken).ConfigureAwait(false);
-            return await ReadCertificateAuthorityAsync(this._certificateAuthorityPath, cancellationToken).ConfigureAwait(false);
+            await this.WriteCertificateAuthorityAsync(this._certificateAuthorityPath, certificate, cancellationToken).ConfigureAwait(false);
+            return await this.ReadCertificateAuthorityAsync(this._certificateAuthorityPath, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -186,6 +191,6 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
     {
         public string CertificatePem { get; init; } = string.Empty;
 
-        public string PrivateKeyPem { get; init; } = string.Empty;
+        public string ProtectedKeyPem { get; init; } = string.Empty;
     }
 }

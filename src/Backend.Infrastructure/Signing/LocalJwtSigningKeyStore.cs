@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Backend.As.Domain.Services;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Backend.Infrastructure.Signing;
 
@@ -8,10 +9,12 @@ public sealed class LocalJwtSigningKeyStore : IJwtSigningKeyStore, IDisposable
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly string _path;
+    private readonly IDataProtector _dataProtector;
 
-    public LocalJwtSigningKeyStore(string path)
+    public LocalJwtSigningKeyStore(string path, IDataProtector dataProtector)
     {
         this._path = path;
+        this._dataProtector = dataProtector;
     }
 
     public async Task<JwtSigningKey> GetActiveKeyAsync(CancellationToken cancellationToken = default)
@@ -58,8 +61,10 @@ public sealed class LocalJwtSigningKeyStore : IJwtSigningKeyStore, IDisposable
                 .ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Signing key file is invalid.");
 
+            var plainPem = this._dataProtector.Unprotect(file.ProtectedKeyPem);
+
             using var rsa = RSA.Create();
-            rsa.ImportFromPem(file.PrivateKeyPem);
+            rsa.ImportFromPem(plainPem);
 
             return new JwtSigningKey
             {
@@ -83,7 +88,7 @@ public sealed class LocalJwtSigningKeyStore : IJwtSigningKeyStore, IDisposable
         var file = new SigningKeyFile
         {
             KeyId = key.KeyId,
-            PrivateKeyPem = rsa.ExportRSAPrivateKeyPem(),
+            ProtectedKeyPem = this._dataProtector.Protect(rsa.ExportRSAPrivateKeyPem()),
         };
 
         var fileOptions = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
@@ -103,6 +108,6 @@ public sealed class LocalJwtSigningKeyStore : IJwtSigningKeyStore, IDisposable
     {
         public string KeyId { get; init; } = string.Empty;
 
-        public string PrivateKeyPem { get; init; } = string.Empty;
+        public string ProtectedKeyPem { get; init; } = string.Empty;
     }
 }

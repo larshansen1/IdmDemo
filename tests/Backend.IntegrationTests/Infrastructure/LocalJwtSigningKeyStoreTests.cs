@@ -1,4 +1,5 @@
 using Backend.Infrastructure.Signing;
+using Microsoft.AspNetCore.DataProtection;
 using Xunit;
 
 namespace Backend.IntegrationTests.Infrastructure;
@@ -11,7 +12,8 @@ public sealed class LocalJwtSigningKeyStoreTests
         var path = Path.Combine(Path.GetTempPath(), $"idm_signing_{Guid.NewGuid():N}.json");
         try
         {
-            using var store = new LocalJwtSigningKeyStore(path);
+            var protector = new EphemeralDataProtectionProvider().CreateProtector("test");
+            using var store = new LocalJwtSigningKeyStore(path, protector);
 
             var key = await store.GetActiveKeyAsync();
 
@@ -33,20 +35,42 @@ public sealed class LocalJwtSigningKeyStoreTests
         var path = Path.Combine(Path.GetTempPath(), $"idm_signing_{Guid.NewGuid():N}.json");
         try
         {
+            var provider = new EphemeralDataProtectionProvider();
+
             string firstKeyId;
-            using (var firstStore = new LocalJwtSigningKeyStore(path))
+            using (var firstStore = new LocalJwtSigningKeyStore(path, provider.CreateProtector("test")))
             {
                 var firstKey = await firstStore.GetActiveKeyAsync();
                 firstKeyId = firstKey.KeyId;
             }
 
-            using var secondStore = new LocalJwtSigningKeyStore(path);
+            using var secondStore = new LocalJwtSigningKeyStore(path, provider.CreateProtector("test"));
             var secondKey = await secondStore.GetActiveKeyAsync();
 
             Assert.Equal(firstKeyId, secondKey.KeyId);
             Assert.NotNull(secondKey.Parameters.Modulus);
             Assert.NotNull(secondKey.Parameters.Exponent);
             Assert.NotNull(secondKey.Parameters.D);
+        }
+        finally
+        {
+            DeleteIfExists(path);
+        }
+    }
+
+    [Fact]
+    public async Task GetActiveKeyAsync_WrittenFile_ContainsNoPlaintextPem()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"idm_signing_{Guid.NewGuid():N}.json");
+        try
+        {
+            var protector = new EphemeralDataProtectionProvider().CreateProtector("test");
+            using var store = new LocalJwtSigningKeyStore(path, protector);
+            await store.GetActiveKeyAsync();
+
+            var content = await File.ReadAllTextAsync(path);
+
+            Assert.DoesNotContain("-----BEGIN", content, StringComparison.Ordinal);
         }
         finally
         {
