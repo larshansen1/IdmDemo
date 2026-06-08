@@ -51,8 +51,20 @@ if (transport == McpTransport.Http)
         ForwardLimit = 1,
         RequireHeaderSymmetry = false,
     };
-    forwardedHeadersOptions.KnownIPNetworks.Clear();
-    forwardedHeadersOptions.KnownProxies.Clear();
+    foreach (var entry in runtimeOptions.Hosted.TrustedProxyNetworks)
+    {
+        var slash = entry.IndexOf('/', StringComparison.Ordinal);
+        if (slash > 0
+            && System.Net.IPAddress.TryParse(entry[..slash], out var prefix)
+            && int.TryParse(entry[(slash + 1)..], out var prefixLength))
+        {
+            forwardedHeadersOptions.KnownIPNetworks.Add(new System.Net.IPNetwork(prefix, prefixLength));
+        }
+        else if (System.Net.IPAddress.TryParse(entry, out var singleAddress))
+        {
+            forwardedHeadersOptions.KnownProxies.Add(singleAddress);
+        }
+    }
 
     var app = builder.Build();
     app.MapIdmMcpHealthEndpoints();
