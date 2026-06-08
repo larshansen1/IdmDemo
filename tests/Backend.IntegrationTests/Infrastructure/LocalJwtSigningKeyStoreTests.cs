@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text.Json;
 using Backend.Infrastructure.Signing;
 using Microsoft.AspNetCore.DataProtection;
 using Xunit;
@@ -70,6 +72,33 @@ public sealed class LocalJwtSigningKeyStoreTests
 
             var content = await File.ReadAllTextAsync(path);
 
+            Assert.DoesNotContain("-----BEGIN", content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteIfExists(path);
+        }
+    }
+
+    [Fact]
+    public async Task GetActiveKeyAsync_LegacyPlaintextFile_MigratesToEncrypted()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"idm_signing_{Guid.NewGuid():N}.json");
+        try
+        {
+            var keyId = Guid.NewGuid().ToString("N");
+            using var rsa = RSA.Create(2048);
+            var legacyFile = new { KeyId = keyId, PrivateKeyPem = rsa.ExportRSAPrivateKeyPem() };
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(legacyFile));
+
+            var protector = new EphemeralDataProtectionProvider().CreateProtector("test");
+            using var store = new LocalJwtSigningKeyStore(path, protector);
+
+            var key = await store.GetActiveKeyAsync();
+
+            Assert.Equal(keyId, key.KeyId);
+            Assert.NotNull(key.Parameters.D);
+            var content = await File.ReadAllTextAsync(path);
             Assert.DoesNotContain("-----BEGIN", content, StringComparison.Ordinal);
         }
         finally

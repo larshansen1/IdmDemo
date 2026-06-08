@@ -54,24 +54,45 @@ public sealed class LocalJwtSigningKeyStore : IJwtSigningKeyStore, IDisposable
 
     private async Task<JwtSigningKey> ReadKeyAsync(CancellationToken cancellationToken)
     {
+        SigningKeyFile file;
         var stream = File.OpenRead(this._path);
         await using (stream.ConfigureAwait(false))
         {
-            var file = await JsonSerializer.DeserializeAsync<SigningKeyFile>(stream, cancellationToken: cancellationToken)
+            file = await JsonSerializer.DeserializeAsync<SigningKeyFile>(stream, cancellationToken: cancellationToken)
                 .ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Signing key file is invalid.");
-
-            var plainPem = this._dataProtector.Unprotect(file.ProtectedKeyPem);
-
-            using var rsa = RSA.Create();
-            rsa.ImportFromPem(plainPem);
-
-            return new JwtSigningKey
-            {
-                KeyId = file.KeyId,
-                Parameters = rsa.ExportParameters(true),
-            };
         }
+
+        string plainPem;
+        if (!string.IsNullOrEmpty(file.ProtectedKeyPem))
+        {
+            plainPem = this._dataProtector.Unprotect(file.ProtectedKeyPem);
+        }
+        else if (!string.IsNullOrEmpty(file.PrivateKeyPem))
+        {
+            // Legacy plaintext format — migrate to encrypted on first read
+            plainPem = file.PrivateKeyPem;
+        }
+        else
+        {
+            throw new InvalidOperationException("Signing key file contains no key material.");
+        }
+
+        using var rsa = RSA.Create();
+        rsa.ImportFromPem(plainPem);
+
+        var key = new JwtSigningKey
+        {
+            KeyId = file.KeyId,
+            Parameters = rsa.ExportParameters(true),
+        };
+
+        if (string.IsNullOrEmpty(file.ProtectedKeyPem))
+        {
+            await this.WriteKeyAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+
+        return key;
     }
 
     private async Task WriteKeyAsync(JwtSigningKey key, CancellationToken cancellationToken)
@@ -109,5 +130,8 @@ public sealed class LocalJwtSigningKeyStore : IJwtSigningKeyStore, IDisposable
         public string KeyId { get; init; } = string.Empty;
 
         public string ProtectedKeyPem { get; init; } = string.Empty;
+
+        // Legacy — plaintext PEM written before Data Protection was added. Never written, only read for migration.
+        public string PrivateKeyPem { get; init; } = string.Empty;
     }
 }
