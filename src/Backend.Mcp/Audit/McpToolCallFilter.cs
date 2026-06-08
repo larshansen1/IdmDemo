@@ -92,6 +92,11 @@ public sealed class McpToolCallFilter
         }
 
         this._auditLogger.ToolSucceeded(resultContext, result);
+
+        if (auditContext.Destructive)
+        {
+            this._auditLogger.DestructiveToolSucceeded(resultContext, result);
+        }
     }
 
     private McpToolPolicy? TryGetPolicy(string toolName)

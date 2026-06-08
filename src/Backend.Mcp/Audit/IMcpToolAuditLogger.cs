@@ -11,4 +11,6 @@ public interface IMcpToolAuditLogger
     void ToolFailed(McpToolAuditContext context, string reason, Exception? exception = null);
 
     void ToolSucceeded(McpToolAuditContext context, CallToolResult result);
+
+    void DestructiveToolSucceeded(McpToolAuditContext context, CallToolResult result);
 }

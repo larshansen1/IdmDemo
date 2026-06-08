@@ -1,7 +1,10 @@
 using System.Text.Json;
 using Backend.Mcp;
+using Backend.Mcp.RateLimit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace Backend.Tests.Mcp;
@@ -94,7 +97,8 @@ public sealed class McpMutationGuardTests
         var guard = new McpMutationGuard(
             Options.Create(new McpRuntimeOptions { Profile = McpProfile.HostedProduction }),
             new McpToolPolicyProvider(),
-            new HttpContextAccessor { HttpContext = new DefaultHttpContext() });
+            new HttpContextAccessor { HttpContext = new DefaultHttpContext() },
+            new DestructiveCallRateLimiter());
 
         Assert.Throws<McpToolException>(() => guard.EnsureToolAllowed("idm_list_machine_clients", null));
     }
@@ -115,12 +119,48 @@ public sealed class McpMutationGuardTests
         Assert.Throws<McpToolException>(() => guard.EnsureToolAllowed("idm_delete_user", CreateArguments(("confirm", false))));
     }
 
-    private static McpMutationGuard CreateGuard(McpRuntimeOptions options)
+    [Fact]
+    public void EnsureDestructiveAllowed_RateLimitExceeded_ThrowsToolException()
+    {
+        var rateLimiter = Substitute.For<IDestructiveCallRateLimiter>();
+        rateLimiter.When(r => r.RecordAndEnforce(Arg.Any<string>()))
+            .Throw(new McpToolException("Rate limit exceeded: at most 3 destructive operations per hour per caller."));
+        var guard = CreateGuard(new McpRuntimeOptions(), rateLimiter);
+
+        Assert.Throws<McpToolException>(() => guard.EnsureDestructiveAllowed(true));
+    }
+
+    [Fact]
+    public void EnsureDestructiveAllowed_WithinRateLimit_DoesNotThrow()
+    {
+        var guard = CreateGuard(new McpRuntimeOptions());
+
+        for (var i = 0; i < DestructiveCallRateLimiter.Limit; i++)
+        {
+            guard.EnsureDestructiveAllowed(true);
+        }
+    }
+
+    [Fact]
+    public void EnsureDestructiveAllowed_ExceedsRateLimit_ThrowsOnFourthCall()
+    {
+        var guard = CreateGuard(new McpRuntimeOptions());
+
+        for (var i = 0; i < DestructiveCallRateLimiter.Limit; i++)
+        {
+            guard.EnsureDestructiveAllowed(true);
+        }
+
+        Assert.Throws<McpToolException>(() => guard.EnsureDestructiveAllowed(true));
+    }
+
+    private static McpMutationGuard CreateGuard(McpRuntimeOptions options, IDestructiveCallRateLimiter? rateLimiter = null)
     {
         return new McpMutationGuard(
             Options.Create(options),
             new McpToolPolicyProvider(),
-            new HttpContextAccessor());
+            new HttpContextAccessor(),
+            rateLimiter ?? new DestructiveCallRateLimiter());
     }
 
     private static Dictionary<string, JsonElement> CreateArguments(params (string Name, bool Value)[] values)
@@ -143,6 +183,7 @@ public sealed class McpMutationGuardTests
         return new McpMutationGuard(
             Options.Create(new McpRuntimeOptions { Profile = McpProfile.LocalHostedDevelopment }),
             new McpToolPolicyProvider(),
-            new HttpContextAccessor { HttpContext = context });
+            new HttpContextAccessor { HttpContext = context },
+            new DestructiveCallRateLimiter());
     }
 }

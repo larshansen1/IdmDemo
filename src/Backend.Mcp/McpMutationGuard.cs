@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Backend.Mcp.RateLimit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 
@@ -9,19 +10,23 @@ public sealed class McpMutationGuard : IMcpMutationGuard
     private readonly McpEffectiveRuntimeSettings _runtimeSettings;
     private readonly IMcpToolPolicyProvider _policyProvider;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IDestructiveCallRateLimiter _rateLimiter;
 
     public McpMutationGuard(
         IOptions<McpRuntimeOptions> options,
         IMcpToolPolicyProvider policyProvider,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        IDestructiveCallRateLimiter rateLimiter)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(policyProvider);
         ArgumentNullException.ThrowIfNull(httpContextAccessor);
+        ArgumentNullException.ThrowIfNull(rateLimiter);
 
         this._runtimeSettings = McpRuntimeProfileResolver.Resolve(options.Value);
         this._policyProvider = policyProvider;
         this._httpContextAccessor = httpContextAccessor;
+        this._rateLimiter = rateLimiter;
     }
 
     public void EnsureMutationAllowed()
@@ -40,6 +45,8 @@ public sealed class McpMutationGuard : IMcpMutationGuard
         {
             throw new McpToolException("This destructive tool requires confirm: true.");
         }
+
+        this._rateLimiter.RecordAndEnforce(this.GetCallerKey());
     }
 
     public void EnsureToolAllowed(string toolName, IDictionary<string, JsonElement>? arguments)
@@ -87,6 +94,12 @@ public sealed class McpMutationGuard : IMcpMutationGuard
         {
             this.EnsureMutationAllowed();
         }
+    }
+
+    private string GetCallerKey()
+    {
+        var caller = this._httpContextAccessor.HttpContext?.Items[typeof(McpCallerContext)] as McpCallerContext;
+        return caller?.ClientId ?? "local";
     }
 
     private void EnsureHostedToolAllowed(McpToolPolicy policy, IDictionary<string, JsonElement>? arguments)
