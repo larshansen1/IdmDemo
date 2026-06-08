@@ -142,12 +142,23 @@ jobs:
       - name: Check for source changes
         id: changes
         run: |
-          if ! git rev-parse HEAD~1 >/dev/null 2>&1 || \
-             git diff --name-only HEAD~1 | grep -qE '^(src/|Directory\.Build\.props$|global\.json$)'; then
-            echo "src-changed=true" >> $GITHUB_OUTPUT
+          if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+            echo "src-changed=true"    >> $GITHUB_OUTPUT
+            echo "deploy-changed=true" >> $GITHUB_OUTPUT
           else
-            echo "src-changed=false" >> $GITHUB_OUTPUT
-            echo "No source changes — skipping container build and deploy."
+            CHANGED=$(git diff --name-only HEAD~1)
+            if echo "$CHANGED" | grep -qE '^(src/|Directory\.Build\.props$|global\.json$)'; then
+              echo "src-changed=true" >> $GITHUB_OUTPUT
+            else
+              echo "src-changed=false" >> $GITHUB_OUTPUT
+              echo "No source changes — skipping container build."
+            fi
+            if echo "$CHANGED" | grep -qE '^(src/|Directory\.Build\.props$|global\.json$|deploy/production/)'; then
+              echo "deploy-changed=true" >> $GITHUB_OUTPUT
+            else
+              echo "deploy-changed=false" >> $GITHUB_OUTPUT
+              echo "No source or deploy changes — skipping deployment."
+            fi
           fi
 
       - name: Set up Docker Buildx
@@ -197,17 +208,17 @@ jobs:
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Update production deployment files
-        if: steps.changes.outputs.src-changed == 'true'
+        if: steps.changes.outputs.deploy-changed == 'true'
         run: |
           install -m 644 deploy/production/compose.yml /home/admin/docker/idmdemo/compose.yml
           install -m 755 deploy/production/deploy.sh /home/admin/docker/idmdemo/deploy.sh
 
       - name: Deploy
-        if: steps.changes.outputs.src-changed == 'true'
+        if: steps.changes.outputs.deploy-changed == 'true'
         run: /home/admin/docker/idmdemo/deploy.sh '${{ github.sha }}'
 
       - name: Run remote MCP production smoke
-        if: steps.changes.outputs.src-changed == 'true'
+        if: steps.changes.outputs.deploy-changed == 'true'
         env:
           SMOKE_CLIENT_ID: idm-mcp-smoke
           SMOKE_CERT_PATH: ${{ runner.temp }}/idmdemo-prod-mcp-smoke-client.pem
