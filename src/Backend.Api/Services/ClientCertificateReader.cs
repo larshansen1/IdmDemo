@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 
 namespace Backend.Api.Services;
@@ -9,7 +10,7 @@ public sealed class ClientCertificateReader : IClientCertificateReader
 
     private readonly bool _enableForwardedCertificate;
     private readonly string _forwardedCertificateHeader;
-    private readonly HashSet<IPAddress> _trustedProxies;
+    private readonly List<IPNetwork> _trustedNetworks;
 
     public ClientCertificateReader(IConfiguration configuration)
     {
@@ -22,7 +23,7 @@ public sealed class ClientCertificateReader : IClientCertificateReader
         var proxyStrings = configuration
             .GetSection("AuthorizationServer:TrustedProxies")
             .Get<string[]>() ?? [];
-        this._trustedProxies = proxyStrings.Select(IPAddress.Parse).ToHashSet();
+        this._trustedNetworks = proxyStrings.Select(ParseNetwork).ToList();
     }
 
     public X509Certificate2? Read(HttpContext context)
@@ -50,7 +51,7 @@ public sealed class ClientCertificateReader : IClientCertificateReader
             remoteIp = remoteIp.MapToIPv4();
         }
 
-        if (!this._trustedProxies.Contains(remoteIp))
+        if (!this._trustedNetworks.Exists(n => n.Contains(remoteIp)))
         {
             return null;
         }
@@ -61,6 +62,18 @@ public sealed class ClientCertificateReader : IClientCertificateReader
         }
 
         return ParseForwardedCertificate(headerValue.ToString());
+    }
+
+    private static IPNetwork ParseNetwork(string entry)
+    {
+        if (entry.Contains('/', StringComparison.Ordinal))
+        {
+            return IPNetwork.Parse(entry);
+        }
+
+        var ip = IPAddress.Parse(entry);
+        var prefix = ip.AddressFamily == AddressFamily.InterNetworkV6 ? 128 : 32;
+        return new IPNetwork(ip, prefix);
     }
 
     private static X509Certificate2? ParseForwardedCertificate(string value)
