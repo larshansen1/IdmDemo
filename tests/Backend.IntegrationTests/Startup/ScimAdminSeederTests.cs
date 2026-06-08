@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Backend.Application.Models.Auth;
 using Backend.Infrastructure.Persistence;
+using Backend.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -104,6 +105,8 @@ public sealed class ScimAdminSeederTests
             builder.UseSetting("AuthorizationServer:SigningKeyPath", this._signingKeyPath);
             builder.UseSetting("AuthorizationServer:EnableForwardedClientCertificate", "true");
             builder.UseSetting("AuthorizationServer:ForwardedClientCertificateHeader", "X-Client-Cert");
+            builder.UseSetting("AuthorizationServer:TrustedProxies:0", "127.0.0.1");
+            builder.UseSetting("AuthorizationServer:TrustedProxies:1", "::1");
             builder.UseSetting("CertificateAuthority:KeyPath", this._certificateAuthorityPath);
 
             builder.ConfigureServices(services =>
@@ -112,6 +115,8 @@ public sealed class ScimAdminSeederTests
 
                 services.AddDbContext<AppDbContext>(options =>
                     options.UseSqlite($"Data Source={this._dbPath}"));
+
+                services.AddSingleton<IStartupFilter>(new SetLoopbackRemoteIpFilter());
             });
         }
 
