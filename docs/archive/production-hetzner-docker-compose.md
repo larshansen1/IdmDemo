@@ -71,6 +71,15 @@ repairs ownership on the SQLite data volume and signing-key volume so the
 non-root .NET `app` user can create `/data/idm-demo.db`,
 `/keys/signing-key.json`, and `/keys/certificate-authority.json`.
 
+### Volume naming
+
+Docker Compose prefixes named volumes with the project name, so the actual
+volume names on the host are `idmdemo_idmdemo-data` and `idmdemo_idmdemo-keys`
+— **not** the bare `idmdemo-data` / `idmdemo-keys` names from `compose.yml`.
+Verify with `docker volume ls | grep idmdemo` before running backup or
+inspection commands. Using the bare name against `docker volume inspect` will
+silently operate on an empty or non-existent volume.
+
 ## NGINX
 
 Install the config:

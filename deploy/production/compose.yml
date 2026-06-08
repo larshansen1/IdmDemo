@@ -28,6 +28,7 @@ services:
           -days 3650 -nodes \
           -subj "/CN=idm-mcp-backend"
         cat /tmp/mcp-cert.pem /tmp/mcp-key.pem > /keys/mcp-client.pem
+        chmod 600 /keys/mcp-client.pem
         echo "MCP client certificate generated."
     volumes:
       - idmdemo-keys:/keys
