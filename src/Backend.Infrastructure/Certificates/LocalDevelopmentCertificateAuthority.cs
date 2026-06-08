@@ -119,19 +119,42 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
         string path,
         CancellationToken cancellationToken)
     {
-        using var stream = File.OpenRead(path);
-        var storedCertificate = await JsonSerializer.DeserializeAsync<StoredCertificateAuthority>(
-                stream,
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Stored certificate authority could not be read.");
+        StoredCertificateAuthority storedCertificate;
+        using (var stream = File.OpenRead(path))
+        {
+            storedCertificate = await JsonSerializer.DeserializeAsync<StoredCertificateAuthority>(
+                    stream,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Stored certificate authority could not be read.");
+        }
 
-        var plainPem = this._dataProtector.Unprotect(storedCertificate.ProtectedKeyPem);
+        string plainPem;
+        if (!string.IsNullOrEmpty(storedCertificate.ProtectedKeyPem))
+        {
+            plainPem = this._dataProtector.Unprotect(storedCertificate.ProtectedKeyPem);
+        }
+        else if (!string.IsNullOrEmpty(storedCertificate.PrivateKeyPem))
+        {
+            // Legacy plaintext format — migrate to encrypted on first read
+            plainPem = storedCertificate.PrivateKeyPem;
+        }
+        else
+        {
+            throw new InvalidOperationException("Stored certificate authority contains no key material.");
+        }
 
         using var certificate = X509Certificate2.CreateFromPem(storedCertificate.CertificatePem);
         using var rsa = RSA.Create();
         rsa.ImportFromPem(plainPem);
-        return certificate.CopyWithPrivateKey(rsa);
+        var result = certificate.CopyWithPrivateKey(rsa);
+
+        if (string.IsNullOrEmpty(storedCertificate.ProtectedKeyPem))
+        {
+            await this.WriteCertificateAuthorityAsync(path, result, cancellationToken).ConfigureAwait(false);
+        }
+
+        return result;
     }
 
     private async Task WriteCertificateAuthorityAsync(
@@ -192,5 +215,8 @@ public sealed class LocalDevelopmentCertificateAuthority : ILocalCertificateAuth
         public string CertificatePem { get; init; } = string.Empty;
 
         public string ProtectedKeyPem { get; init; } = string.Empty;
+
+        // Legacy — plaintext PEM written before Data Protection was added. Never written, only read for migration.
+        public string PrivateKeyPem { get; init; } = string.Empty;
     }
 }
