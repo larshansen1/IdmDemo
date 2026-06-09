@@ -55,6 +55,8 @@ services:
       AuthorizationServer__SigningKeyPath: /keys/signing-key.json
       AuthorizationServer__EnableForwardedClientCertificate: "true"
       AuthorizationServer__ForwardedClientCertificateHeader: X-Client-Cert
+      # See comment on backend-mcp: nginx NATed via Docker bridge gateway 172.28.0.1.
+      AuthorizationServer__TrustedProxies__0: "172.28.0.1/32"
       CertificateAuthority__KeyPath: /keys/certificate-authority.json
       ScimAdmin__SeedClientId: ${IDM_MCP_CLIENT_ID:-idm-mcp-backend}
       ScimAdmin__SeedCertPath: /keys/mcp-client.pem
@@ -87,6 +89,10 @@ services:
       Mcp__Profile: HostedProduction
       Mcp__Hosted__Audience: ${MCP_AUDIENCE:-idm-demo-mcp}
       Mcp__ReadOnly: ${MCP_READ_ONLY:-true}
+      # nginx runs on the host and connects to port 5100, which Docker NATs to this container.
+      # The container sees the connection as coming from the bridge gateway (172.28.0.1), not
+      # loopback, so we must list it as a trusted proxy for X-Forwarded-Host to be respected.
+      Mcp__Hosted__TrustedProxyNetworks__0: "172.28.0.1/32"
     ports:
       - "127.0.0.1:5100:8080"
     volumes:
@@ -97,6 +103,11 @@ services:
 networks:
   idmdemo:
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/24
+          gateway: 172.28.0.1
 
 volumes:
   idmdemo-data:
