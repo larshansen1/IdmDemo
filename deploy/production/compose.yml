@@ -55,6 +55,8 @@ services:
       AuthorizationServer__SigningKeyPath: /keys/signing-key.json
       AuthorizationServer__EnableForwardedClientCertificate: "true"
       AuthorizationServer__ForwardedClientCertificateHeader: X-Client-Cert
+      # See comment on backend-mcp: nginx NATed via Docker bridge gateway 172.28.0.1.
+      AuthorizationServer__TrustedProxies__0: "172.28.0.1/32"
       CertificateAuthority__KeyPath: /keys/certificate-authority.json
       ScimAdmin__SeedClientId: ${IDM_MCP_CLIENT_ID:-idm-mcp-backend}
       ScimAdmin__SeedCertPath: /keys/mcp-client.pem
